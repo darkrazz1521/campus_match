@@ -1,24 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
-import 'register_screen.dart';
+import 'login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
-  bool _obscurePassword = true;
-  bool rememberMe = false;
-  bool _isLoading = false;
-  bool _emailError = false;
-
+  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
+
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _isLoading = false;
+  bool _emailError = false;
+  bool _passwordMismatch = false;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -37,34 +40,45 @@ class _LoginScreenState extends State<LoginScreen>
       curve: Curves.easeInOut,
     );
     _fadeController.value = 1.0; // 👈 makes Login text visible initially
-
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
-  Future<void> _validateAndLogin() async {
+  Future<void> _validateAndRegister() async {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final confirm = _confirmController.text.trim();
+
+    if (name.isEmpty) return;
 
     if (!_emailRegex.hasMatch(email)) {
       setState(() => _emailError = true);
       return;
     }
 
-    if (password.isEmpty) return;
+    if (password != confirm) {
+      setState(() => _passwordMismatch = true);
+      return;
+    }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _passwordMismatch = false;
+    });
     _fadeController.forward(from: 0);
 
     await Future.delayed(const Duration(seconds: 2));
 
-    if (!mounted) return; // ✅ Mounted check after async gap
+    if (!mounted) return;
 
     setState(() => _isLoading = false);
     _showSuccessDialog();
@@ -84,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen>
               Future.delayed(composition.duration, () {
                 if (!mounted) return;
                 Navigator.pop(context);
-                Navigator.pushReplacementNamed(context, '/home');
+                Navigator.pushReplacementNamed(context, '/login');
               });
             },
           ),
@@ -129,16 +143,14 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 🌟 Hero transition for App Name
                       Hero(
                         tag: "appName",
                         child: _AppNameAnimation(primaryColor: primaryColor),
                       ),
-
                       const SizedBox(height: 20),
 
                       Text(
-                        "Welcome Back 👋",
+                        "Create Account 📝",
                         style: GoogleFonts.beVietnamPro(
                           color: textColor,
                           fontSize: 24,
@@ -146,7 +158,6 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                       const SizedBox(height: 6),
-
                       Container(
                         width: 60,
                         height: 3,
@@ -156,9 +167,8 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                       const SizedBox(height: 10),
-
                       Text(
-                        "Log in to continue",
+                        "Sign up to get started",
                         style: GoogleFonts.notoSans(
                           color: hintColor,
                           fontSize: 16,
@@ -166,50 +176,29 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                       const SizedBox(height: 32),
 
-                      // 🧑‍🎓 Email Input
-                      Container(
-                        decoration: BoxDecoration(
-                          color: inputBgColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: 0.05,
-                              ), // ✅ fixed
-                              blurRadius: 5,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.email],
-                          onChanged: (_) => setState(() => _emailError = false),
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 18,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.alternate_email,
-                              color: hintColor,
-                            ),
-                            hintText: "College Email",
-                            hintStyle: GoogleFonts.notoSans(color: hintColor),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                color: primaryColor,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          style: GoogleFonts.notoSans(color: textColor),
-                        ),
+                      // 👤 Name
+                      _buildTextField(
+                        controller: _nameController,
+                        hintText: "Full Name",
+                        icon: Icons.person_outline,
+                        inputBgColor: inputBgColor,
+                        hintColor: hintColor,
+                        textColor: textColor,
+                        primaryColor: primaryColor,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 📧 Email
+                      _buildTextField(
+                        controller: _emailController,
+                        hintText: "College Email",
+                        icon: Icons.alternate_email,
+                        inputBgColor: inputBgColor,
+                        hintColor: hintColor,
+                        textColor: textColor,
+                        primaryColor: primaryColor,
+                        keyboardType: TextInputType.emailAddress,
+                        onChanged: (_) => setState(() => _emailError = false),
                       ),
                       if (_emailError)
                         Align(
@@ -224,99 +213,70 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       const SizedBox(height: 16),
 
-                      // 🔐 Password Input
-                      Container(
-                        decoration: BoxDecoration(
-                          color: inputBgColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: 0.05,
-                              ), // ✅ fixed
-                              blurRadius: 5,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          autofillHints: const [AutofillHints.password],
-                          decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 18,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.lock_outline,
-                              color: hintColor,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: hintColor,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            hintText: "Password",
-                            hintStyle: GoogleFonts.notoSans(color: hintColor),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                color: primaryColor,
-                                width: 2,
-                              ),
-                            ),
+                      // 🔐 Password
+                      _buildTextField(
+                        controller: _passwordController,
+                        hintText: "Password",
+                        icon: Icons.lock_outline,
+                        obscureText: _obscurePassword,
+                        inputBgColor: inputBgColor,
+                        hintColor: hintColor,
+                        textColor: textColor,
+                        primaryColor: primaryColor,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: hintColor,
                           ),
-                          style: GoogleFonts.notoSans(color: textColor),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
 
-                      // Remember me + Forgot password
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: rememberMe,
-                                onChanged: (value) =>
-                                    setState(() => rememberMe = value!),
-                                activeColor: primaryColor,
-                              ),
-                              Text(
-                                "Remember Me",
-                                style: GoogleFonts.notoSans(color: textColor),
-                              ),
-                            ],
+                      // 🔐 Confirm Password
+                      _buildTextField(
+                        controller: _confirmController,
+                        hintText: "Confirm Password",
+                        icon: Icons.lock_person_outlined,
+                        obscureText: _obscureConfirm,
+                        inputBgColor: inputBgColor,
+                        hintColor: hintColor,
+                        textColor: textColor,
+                        primaryColor: primaryColor,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureConfirm
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: hintColor,
                           ),
-                          TextButton(
-                            onPressed: () {},
-                            child: Text(
-                              "Forgot Password?",
-                              style: GoogleFonts.notoSans(
-                                color: primaryColor,
-                                fontSize: 13,
-                                decoration: TextDecoration.underline,
-                              ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirm = !_obscureConfirm;
+                            });
+                          },
+                        ),
+                      ),
+                      if (_passwordMismatch)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            "Passwords do not match",
+                            style: GoogleFonts.notoSans(
+                              color: Colors.red,
+                              fontSize: 12,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
                       const SizedBox(height: 20),
 
-                      // Login Button
+                      // Register Button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -328,11 +288,11 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             elevation: 4,
                           ),
-                          onPressed: _validateAndLogin,
+                          onPressed: _validateAndRegister,
                           child: FadeTransition(
                             opacity: _fadeAnimation,
                             child: Text(
-                              _isLoading ? "Logging in..." : "Login",
+                              _isLoading ? "signing un..." : "Signup",
                               style: GoogleFonts.beVietnamPro(
                                 color: Colors.white,
                                 fontSize: 15,
@@ -344,12 +304,12 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                       const SizedBox(height: 20),
 
-                      // Register
+                      // Already have account
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            "Don't have an account? ",
+                            "Already have an account? ",
                             style: GoogleFonts.notoSans(
                               color: hintColor,
                               fontSize: 13,
@@ -357,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                           TextButton(
                             onPressed: () {
-                              Navigator.push(
+                              Navigator.pushReplacement(
                                 context,
                                 PageRouteBuilder(
                                   transitionDuration: const Duration(
@@ -368,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen>
                                         context,
                                         animation,
                                         secondaryAnimation,
-                                      ) => const RegisterScreen(),
+                                      ) => const LoginScreen(),
                                   transitionsBuilder:
                                       (
                                         context,
@@ -377,9 +337,9 @@ class _LoginScreenState extends State<LoginScreen>
                                         child,
                                       ) {
                                         const begin = Offset(
+                                          -1.0,
                                           0.0,
-                                          1.0,
-                                        ); // from bottom to top
+                                        ); // slide in from left
                                         const end = Offset.zero;
                                         const curve = Curves.easeInOut;
 
@@ -401,7 +361,7 @@ class _LoginScreenState extends State<LoginScreen>
                             },
 
                             child: Text(
-                              "Register",
+                              "Login",
                               style: GoogleFonts.notoSans(
                                 color: primaryColor,
                                 fontSize: 14,
@@ -418,6 +378,56 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+    required Color inputBgColor,
+    required Color hintColor,
+    required Color textColor,
+    required Color primaryColor,
+    Widget? suffixIcon,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: inputBgColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+          prefixIcon: Icon(icon, color: hintColor),
+          suffixIcon: suffixIcon,
+          hintText: hintText,
+          hintStyle: GoogleFonts.notoSans(color: hintColor),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: primaryColor, width: 2),
+          ),
+        ),
+        style: GoogleFonts.notoSans(color: textColor),
       ),
     );
   }
@@ -440,7 +450,6 @@ class _AppNameAnimationState extends State<_AppNameAnimation>
   @override
   void initState() {
     super.initState();
-
     _controllers = List.generate(
       _text.length,
       (i) => AnimationController(
@@ -462,7 +471,7 @@ class _AppNameAnimationState extends State<_AppNameAnimation>
   Future<void> _startAnimation() async {
     for (int i = 0; i < _controllers.length; i++) {
       await Future.delayed(const Duration(milliseconds: 100));
-      if (!mounted) return; // ✅ Prevent setState after dispose
+      if (!mounted) return;
       _controllers[i].forward();
     }
   }
