@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'register_screen.dart';
+import '../../services/auth_service.dart';
+import '../../widgets/dialogs.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -49,26 +52,50 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _validateAndLogin() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+  final email = _emailController.text.trim();
+  final password = _passwordController.text.trim();
 
-    if (!_emailRegex.hasMatch(email)) {
-      setState(() => _emailError = true);
-      return;
-    }
+  if (!_emailRegex.hasMatch(email)) {
+    setState(() => _emailError = true);
+    return;
+  }
 
-    if (password.isEmpty) return;
+  if (password.isEmpty) return;
 
-    setState(() => _isLoading = true);
-    _fadeController.forward(from: 0);
+  setState(() => _isLoading = true);
+  _fadeController.forward(from: 0);
 
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!mounted) return; // ✅ Mounted check after async gap
+  try {
+    // Login attempt
+    final result = await AuthService().loginUser(email: email, password: password);
 
     setState(() => _isLoading = false);
-    _showSuccessDialog();
+
+    if (result == null) {
+      // ✅ Success
+      _showSuccessDialog();
+    } else if (result.contains("verify")) {
+      // 📩 Email not verified
+      Dialogs.showEmailNotVerifiedDialog(
+  context,
+  _emailController.text.trim(),
+  password: _passwordController.text.trim(),
+);
+
+    } else {
+      // ❌ Invalid credentials
+      Dialogs.showErrorDialog(context, result);
+    }
+  } catch (e) {
+    setState(() => _isLoading = false);
+    Dialogs.showErrorDialog(context, 'Something went wrong. Please try again.');
   }
+}
+
+
+
+
+
 
   void _showSuccessDialog() {
     showDialog(

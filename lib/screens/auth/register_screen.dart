@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 import 'dart:math';
 import 'login_screen.dart';
 import '../../services/auth_service.dart';
@@ -115,35 +114,15 @@ class _RegisterScreenState extends State<RegisterScreen>
   setState(() => _isLoading = false);
 
   if (error == null) {
-    _showSuccessDialog();
-  } else {
-    _showSnackBar(error);
-  }
+  Navigator.pushReplacementNamed(context, '/verify-email', arguments: email);
+} else {
+  _showSnackBar(error);
+}
+
 }
 
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Center(
-          child: Lottie.asset(
-            'assets/animations/login_animation.json',
-            repeat: false,
-            onLoaded: (composition) {
-              Future.delayed(composition.duration, () {
-                if (!mounted) return;
-                Navigator.pop(context);
-                Navigator.pushReplacementNamed(context, '/login');
-              });
-            },
-          ),
-        ),
-      ),
-    );
-  }
+  
 
   @override
   Widget build(BuildContext context) {
