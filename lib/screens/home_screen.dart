@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'swiping_screen.dart';
+import 'chat_screen.dart';
+import 'confessions_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,167 +16,85 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
   final Color primaryColor = const Color(0xFFF04299);
-  final Color bgColor = const Color(0xFFFCF8FA);
-  final Color textColor = const Color(0xFF1B0D14);
   final Color accentColor = const Color(0xFF9A4C73);
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  final List<Widget> _pages = const [
+    SwipingScreen(), // ❤️ Tinder-style swiping
+    ChatScreen(),
+    ConfessionsScreen(),
+    ProfileSetupScreen(),
+  ];
+
+  // 🌈 Romantic gradient background
+  final Gradient bgGradient = const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFFFDEE9), // soft pink
+      Color(0xFFB5FFFC), // light aqua
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: bgColor,
-      appBar: AppBar(
-        backgroundColor: bgColor,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          "CampusMatch",
-          style: GoogleFonts.beVietnamPro(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.settings, color: Colors.black87),
-          )
-        ],
-      ),
-
-      // -------- MAIN CONTENT ----------
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // --- Profile Card ---
-              Container(
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        "https://lh3.googleusercontent.com/aida-public/AB6AXuB5bmoZVGZTgzmzMLDHj9Hl-XkxvfD6-7QFEuDuu4KPfV-shBVpIer3Nx5pcOK1ek4qFZV7vartI4b3N3YUmjVFMou7pij2pYTQDLgWPJGmxo62LJrUMyT19eiYlPpdKFv2Nds0WdoJVvCkEar63qrFRWOnVkkqE7DaBLZaBsdmKtt-tL9QCwFo_zhHN4BbfQ00RiRI-klc8NpYa4IqNRFo49qAaBqP72t1JYVvKKhnzoSFH2wDRPyWvNkXLhyPFD3GdY5S4WMfyVo",
-                        width: double.infinity,
-                        height: 250,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Sophia",
-                      style: GoogleFonts.beVietnamPro(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Likes: Hiking, Photography, Music",
-                      style: GoogleFonts.notoSans(
-                        fontSize: 14,
-                        color: accentColor,
-                      ),
-                    ),
-                    Text(
-                      "Senior",
-                      style: GoogleFonts.notoSans(
-                        fontSize: 14,
-                        color: accentColor,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // --- Match Percentage ---
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Match Percentage",
-                        style: GoogleFonts.notoSans(
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: 0.75,
-                        backgroundColor: const Color(0xFFE7CFDB),
-                        color: primaryColor,
-                        minHeight: 8,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // --- Like / Dislike Buttons ---
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFF3E7ED),
-                              foregroundColor: textColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () {},
-                            child: const Text("Dislike"),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              foregroundColor: bgColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () {},
-                            child: const Text("Like"),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+      extendBodyBehindAppBar: true, // 👈 lets gradient show behind AppBar
+      appBar: _selectedIndex == 0
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              centerTitle: true,
+              title: Text(
+                "CampusMatch",
+                style: GoogleFonts.beVietnamPro(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
+              actions: [
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.notifications, color: Colors.black87),
+                ),
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.settings, color: Colors.black87),
+                ),
+              ],
+            )
+          : null, // 👈 Hide AppBar for other tabs
+
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: bgGradient,
+        ),
+        child: SafeArea(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: _pages,
           ),
         ),
       ),
 
-      // -------- BOTTOM NAVIGATION ----------
+      // 🌸 Elegant bottom navigation
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: bgColor,
-        selectedItemColor: textColor,
-        unselectedItemColor: accentColor,
         currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        onTap: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        backgroundColor: Colors.white.withOpacity(0.8),
+        selectedItemColor: primaryColor,
+        unselectedItemColor: accentColor.withOpacity(0.7),
+        showUnselectedLabels: true,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
-          BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: "Confessions"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile"),
+          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: "Home"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.people_alt_outlined), label: "Confessions"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: "Profile"),
         ],
       ),
     );

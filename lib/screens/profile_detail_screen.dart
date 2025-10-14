@@ -1,0 +1,167 @@
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
+
+class ProfileDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> profile;
+  const ProfileDetailScreen({super.key, required this.profile});
+
+  final Color primaryColor = const Color(0xFFF04299);
+  final Color accentColor = const Color(0xFF9A4C73);
+  final Color bgColor = const Color(0xFFFCF8FA);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top Image with Hero
+            Stack(
+              children: [
+                Hero(
+                  tag: profile["name"],
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                    child: Image.network(
+                      profile["image"],
+                      width: double.infinity,
+                      height: 350,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                // Gradient overlay
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(profile["name"],
+                                  style: GoogleFonts.beVietnamPro(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white)),
+                              const SizedBox(height: 2),
+                              Text(profile["year"],
+                                  style: GoogleFonts.notoSans(fontSize: 16, color: Colors.white70)),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(Icons.close, color: Colors.white, size: 28)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Top match badge
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [primaryColor, accentColor]),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      "${(profile["match"] * 100).toInt()}% Match",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Expanded Info
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Bio
+                    Text("About Me",
+                        style: GoogleFonts.beVietnamPro(
+                            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+                    Text(profile["bio"] ?? "No bio available",
+                        style: GoogleFonts.notoSans(fontSize: 14, color: Colors.black87)),
+                    const SizedBox(height: 16),
+                    // Likes / Interests
+                    Text("Interests",
+                        style: GoogleFonts.beVietnamPro(
+                            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: List.generate(profile["likes"].length, (i) {
+                        return Chip(
+                          label: Text(profile["likes"][i]),
+                          backgroundColor: const Color(0xFFF3E7ED),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 100), // extra space for buttons
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      // Floating Buttons
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _animatedCircleButton(Icons.close, Colors.redAccent, 28, () => Navigator.pop(context)),
+          _animatedCircleButton(Icons.favorite, primaryColor, 32, () => Navigator.pop(context), radius: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _animatedCircleButton(IconData icon, Color color, double iconSize, VoidCallback onTap, {double radius = 30}) {
+    return GestureDetector(
+      onTap: () {
+        onTap();
+        HapticFeedback.lightImpact();
+      },
+      child: TweenAnimationBuilder(
+        duration: const Duration(milliseconds: 200),
+        tween: Tween<double>(begin: 1, end: 1.1),
+        builder: (context, double scale, child) {
+          return Transform.scale(
+            scale: scale,
+            child: CircleAvatar(
+              backgroundColor: color == primaryColor ? primaryColor : Colors.white,
+              radius: radius,
+              child: Icon(icon, color: color == primaryColor ? Colors.white : color, size: iconSize),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

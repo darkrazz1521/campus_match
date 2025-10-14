@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
+import 'package:firebase_auth/firebase_auth.dart';
+
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -38,9 +40,18 @@ class _SplashScreenState extends State<SplashScreen>
 
     // --- NAVIGATE TO LOGIN AFTER FIRST FRAME ---
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Timer(const Duration(seconds: 4), () {
-        Navigator.pushReplacementNamed(context, '/login');
-      });
+      Timer(const Duration(seconds: 4), () async {
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user != null && user.emailVerified) {
+    // ✅ User is logged in and verified
+    Navigator.pushReplacementNamed(context, '/home');
+  } else {
+    // 🚪 User not logged in
+    Navigator.pushReplacementNamed(context, '/login');
+  }
+});
+
     });
   }
 

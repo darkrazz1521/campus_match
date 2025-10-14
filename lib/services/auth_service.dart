@@ -36,7 +36,7 @@ class AuthService {
       // Sign out user until verified
       await _auth.signOut();
 
-      return null; // ✅ success
+      return null; //  success
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
         case 'email-already-in-use':
@@ -64,7 +64,7 @@ class AuthService {
     return user != null && user.emailVerified;
   }
 
-  /// 🔁 Resend email verification (even after logout)
+  ///  Resend email verification (even after logout)
 Future<String?> resendVerificationEmail({String? email, String? password}) async {
   try {
     User? user = _auth.currentUser;
