@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "566475001303",
+    "firebase_url": "https://campusmatch-2991a-default-rtdb.firebaseio.com",
     "project_id": "campusmatch-2991a",
     "storage_bucket": "campusmatch-2991a.firebasestorage.app"
   },

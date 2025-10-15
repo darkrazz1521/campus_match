@@ -25,7 +25,12 @@ TextStyle fieldLabelStyle() => GoogleFonts.beVietnamPro(
     );
 
 /// Labeled TextField
-Widget buildLabeledField(String label, IconData icon, Color primaryColor) =>
+Widget buildLabeledField({
+  required String label,
+  required IconData icon,
+  required TextEditingController controller,
+  required Color primaryColor,
+}) =>
     Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
@@ -34,6 +39,7 @@ Widget buildLabeledField(String label, IconData icon, Color primaryColor) =>
           Text(label, style: fieldLabelStyle()),
           const SizedBox(height: 4),
           TextField(
+            controller: controller,
             decoration: InputDecoration(
               prefixIcon: Icon(icon, color: const Color(0xFF9A4C73)),
               hintText: "Enter $label",
@@ -54,6 +60,7 @@ Widget buildLabeledField(String label, IconData icon, Color primaryColor) =>
         ],
       ),
     );
+
 
 /// Photo Card
 Widget buildPhotoCard(String url) => Padding(
@@ -79,29 +86,28 @@ Widget buildPhotoCard(String url) => Padding(
     );
 
 /// Add Photo Card
-Widget buildAddPhotoCard(BuildContext context, Color primaryColor) => Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Add photo feature coming soon")),
-          );
-        },
-        child: Container(
-          width: 150,
-          height: 150,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: primaryColor, width: 2),
-          ),
-          child: const Center(
-            child: Icon(Icons.add_a_photo,
-                color: Colors.pinkAccent, size: 36),
-          ),
+Widget buildAddPhotoCard(BuildContext context, Color primaryColor,
+    {required VoidCallback onTap}) {
+  return Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 150,
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: primaryColor, width: 2),
+        ),
+        child: const Center(
+          child: Icon(Icons.add_a_photo, color: Colors.pinkAccent, size: 36),
         ),
       ),
-    );
+    ),
+  );
+}
+
 
 /// Personality Quiz Card
 Widget buildPersonalityQuizCard() => Container(

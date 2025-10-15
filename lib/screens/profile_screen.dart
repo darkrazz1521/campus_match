@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/profile_widgets.dart';
+import '../services/profile_service.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -14,20 +15,41 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final Color accentColor = const Color(0xFF9A4C73);
   final Color backgroundColor = const Color(0xFFfcf8fa);
 
+  // --- Controllers ---
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController collegeController = TextEditingController();
+  final TextEditingController majorController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
+
+  final ProfileService _profileService = ProfileService();
+
+
   int bioCharCount = 0;
   final int bioLimit = 200;
   final Set<String> selectedInterests = {};
+  final List<String> uploadedPhotos = [];
 
-  // --- Step 1 additions ---
+  // --- Scroll FAB ---
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
+  bool _isUploading = false;
 
   @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
+void initState() {
+  super.initState();
+  _scrollController.addListener(_onScroll);
+  _loadUserData(); // fetch user data
+}
+
+Future<void> _loadUserData() async {
+  final name = await _profileService.getCurrentUserName();
+  if (name != null && name.isNotEmpty) {
+    setState(() {
+      nameController.text = name;
+    });
   }
+}
+
 
   void _onScroll() {
     final shouldShow = _scrollController.offset > 200;
@@ -40,8 +62,34 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    nameController.dispose();
+    collegeController.dispose();
+    majorController.dispose();
     bioController.dispose();
     super.dispose();
+  }
+
+  // 🔹 Pick & Upload Image
+  Future<void> _pickAndUploadImage() async {
+    final image = await _profileService.pickImage(fromCamera: false);
+    if (image == null) return;
+
+    setState(() => _isUploading = true);
+
+    final url = await _profileService.uploadImage(image, "testUser123"); // replace with real userId
+
+    setState(() => _isUploading = false);
+
+    if (url != null) {
+      setState(() => uploadedPhotos.add(url));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("✅ Image uploaded successfully!")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ Upload failed. Try again.")),
+      );
+    }
   }
 
   Future<void> _scrollToTop() async {
@@ -51,7 +99,66 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       curve: Curves.easeOut,
     );
   }
-  // --- end Step 1 additions ---
+
+  // --- Validation Logic ---
+  void _validateAndSubmit() async {
+  final name = nameController.text.trim();
+  final college = collegeController.text.trim();
+  final major = majorController.text.trim();
+  final bio = bioController.text.trim();
+
+  if (name.isEmpty || college.isEmpty || major.isEmpty) {
+    _showError("Please fill all fields: Name, College, and Major.");
+    return;
+  }
+  if (bio.isEmpty) {
+    _showError("Please write a short bio about yourself.");
+    return;
+  }
+  if (bio.length > bioLimit) {
+    _showError("Your bio exceeds $bioLimit characters.");
+    return;
+  }
+  if (selectedInterests.isEmpty) {
+    _showError("Select at least one interest.");
+    return;
+  }
+  if (uploadedPhotos.isEmpty) {
+    _showError("Please upload at least one photo.");
+    return;
+  }
+
+  try {
+    await _profileService.saveProfileData(
+      name: name,
+      college: college,
+      major: major,
+      bio: bio,
+      photos: uploadedPhotos,
+      interests: selectedInterests.toList(),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("🎉 Profile saved successfully!"),
+        backgroundColor: Colors.green.shade600,
+      ),
+    );
+  } catch (e) {
+    _showError("Error saving profile: $e");
+  }
+}
+
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,10 +169,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ? FloatingActionButton(
               onPressed: _scrollToTop,
               tooltip: 'Scroll to top',
-              child: const Icon(Icons.arrow_upward),
               backgroundColor: primaryColor,
               heroTag: 'scrollTopFAB',
               elevation: 6,
+              child: const Icon(Icons.arrow_upward),
             )
           : null,
       body: SafeArea(
@@ -89,16 +196,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   left: 8,
                   right: 8,
                   bottom: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: Row(
                   children: [
@@ -125,7 +222,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
               ),
 
-              // 🔹 Scrollable body
+              // 🔹 Scrollable Body
               Expanded(
                 child: SingleChildScrollView(
                   controller: _scrollController,
@@ -144,21 +241,33 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         child: ListView(
                           scrollDirection: Axis.horizontal,
                           children: [
-                            ...[
-                              "https://picsum.photos/300?1",
-                              "https://picsum.photos/300?2",
-                              "https://picsum.photos/300?3"
-                            ].map(buildPhotoCard),
-                            buildAddPhotoCard(context, primaryColor),
+                            ...uploadedPhotos.map(buildPhotoCard),
+                            buildAddPhotoCard(context, primaryColor,
+                            onTap: _pickAndUploadImage),
                           ],
                         ),
                       ),
 
                       // 👩 About Me
                       sectionTitle("About Me"),
-                      buildLabeledField("Name", Icons.person_outline, primaryColor),
-                      buildLabeledField("College", Icons.school_outlined, primaryColor),
-                      buildLabeledField("Major", Icons.menu_book_outlined, primaryColor),
+                      buildLabeledField(
+                        label: "Name",
+                        icon: Icons.person_outline,
+                        controller: nameController,
+                        primaryColor: primaryColor,
+                      ),
+                      buildLabeledField(
+                        label: "College",
+                        icon: Icons.school_outlined,
+                        controller: collegeController,
+                        primaryColor: primaryColor,
+                      ),
+                      buildLabeledField(
+                        label: "Major",
+                        icon: Icons.menu_book_outlined,
+                        controller: majorController,
+                        primaryColor: primaryColor,
+                      ),
 
                       // ✍️ Bio
                       Padding(
@@ -236,7 +345,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content: Text("Quiz feature coming soon!")),
+                                content:
+                                    Text("Quiz feature coming soon!")),
                           );
                         },
                         child: buildPersonalityQuizCard(),
@@ -246,7 +356,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
               ),
 
-              // 🩷 Sticky Complete Button
+              // 🩷 Complete Button
               Container(
                 width: double.infinity,
                 padding:
@@ -262,7 +372,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ],
                 ),
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _validateAndSubmit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
