@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
 
 /// Section Title Widget
 Widget sectionTitle(String title) => Padding(
@@ -63,27 +64,30 @@ Widget buildLabeledField({
 
 
 /// Photo Card
-Widget buildPhotoCard(String url) => Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 150,
-          height: 150,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 6,
-                offset: const Offset(2, 4),
-              )
-            ],
-          ),
-          child: Image.network(url, fit: BoxFit.cover),
+Widget buildPhotoCard(String base64Image) {
+  final imageBytes = base64Decode(base64Image);
+  return Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 150,
+        height: 150,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 6,
+              offset: const Offset(2, 4),
+            )
+          ],
         ),
+        child: Image.memory(imageBytes, fit: BoxFit.cover),
       ),
-    );
+    ),
+  );
+}
 
 /// Add Photo Card
 Widget buildAddPhotoCard(BuildContext context, Color primaryColor,

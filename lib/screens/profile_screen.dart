@@ -20,9 +20,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController collegeController = TextEditingController();
   final TextEditingController majorController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
+  final TextEditingController dobController = TextEditingController();
 
   final ProfileService _profileService = ProfileService();
-
 
   int bioCharCount = 0;
   final int bioLimit = 200;
@@ -35,21 +35,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   bool _isUploading = false;
 
   @override
-void initState() {
-  super.initState();
-  _scrollController.addListener(_onScroll);
-  _loadUserData(); // fetch user data
-}
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _loadUserData(); // fetch user data
+  }
 
-Future<void> _loadUserData() async {
-  final name = await _profileService.getCurrentUserName();
-  if (name != null && name.isNotEmpty) {
+  Future<void> _loadUserData() async {
+    final userData = await _profileService.getCurrentUserData();
+    if (userData == null) return;
+
     setState(() {
-      nameController.text = name;
+      nameController.text = userData['fullName'] ?? '';
+      collegeController.text = userData['gender'] ?? '';
+      majorController.text = userData['collegeYear'] ?? '';
+      dobController.text = userData['dob'] ?? '';
+      bioController.text = userData['bio'] ?? '';
+
+      uploadedPhotos.clear();
+      uploadedPhotos.addAll(List<String>.from(userData['photos'] ?? []));
+      selectedInterests.clear();
+      selectedInterests.addAll(List<String>.from(userData['interests'] ?? []));
     });
   }
-}
-
 
   void _onScroll() {
     final shouldShow = _scrollController.offset > 200;
@@ -65,6 +73,7 @@ Future<void> _loadUserData() async {
     nameController.dispose();
     collegeController.dispose();
     majorController.dispose();
+    dobController.dispose();
     bioController.dispose();
     super.dispose();
   }
@@ -76,7 +85,16 @@ Future<void> _loadUserData() async {
 
     setState(() => _isUploading = true);
 
-    final url = await _profileService.uploadImage(image, "testUser123"); // replace with real userId
+    final userId = _profileService.getCurrentUserId();
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ You must be logged in to upload.")),
+      );
+      return;
+    }
+
+    final url = await _profileService.uploadImage(image, userId);
+    // replace with real userId
 
     setState(() => _isUploading = false);
 
@@ -102,53 +120,57 @@ Future<void> _loadUserData() async {
 
   // --- Validation Logic ---
   void _validateAndSubmit() async {
-  final name = nameController.text.trim();
-  final college = collegeController.text.trim();
-  final major = majorController.text.trim();
-  final bio = bioController.text.trim();
+    final name = nameController.text.trim();
+    final gender = collegeController.text.trim();
+    final collegeYear = majorController.text.trim();
+    final dob = dobController.text.trim();
+    final bio = bioController.text.trim();
 
-  if (name.isEmpty || college.isEmpty || major.isEmpty) {
-    _showError("Please fill all fields: Name, College, and Major.");
-    return;
-  }
-  if (bio.isEmpty) {
-    _showError("Please write a short bio about yourself.");
-    return;
-  }
-  if (bio.length > bioLimit) {
-    _showError("Your bio exceeds $bioLimit characters.");
-    return;
-  }
-  if (selectedInterests.isEmpty) {
-    _showError("Select at least one interest.");
-    return;
-  }
-  if (uploadedPhotos.isEmpty) {
-    _showError("Please upload at least one photo.");
-    return;
-  }
+    if (name.isEmpty || gender.isEmpty || collegeYear.isEmpty || dob.isEmpty) {
+      _showError(
+        "Please fill all fields: Name, Gender, College Year, and DOB.",
+      );
+      return;
+    }
 
-  try {
-    await _profileService.saveProfileData(
-      name: name,
-      college: college,
-      major: major,
-      bio: bio,
-      photos: uploadedPhotos,
-      interests: selectedInterests.toList(),
-    );
+    if (bio.isEmpty) {
+      _showError("Please write a short bio about yourself.");
+      return;
+    }
+    if (bio.length > bioLimit) {
+      _showError("Your bio exceeds $bioLimit characters.");
+      return;
+    }
+    if (selectedInterests.isEmpty) {
+      _showError("Select at least one interest.");
+      return;
+    }
+    if (uploadedPhotos.isEmpty) {
+      _showError("Please upload at least one photo.");
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("🎉 Profile saved successfully!"),
-        backgroundColor: Colors.green.shade600,
-      ),
-    );
-  } catch (e) {
-    _showError("Error saving profile: $e");
+    try {
+      await _profileService.saveProfileData(
+        name: name,
+        gender: gender,
+        collegeYear: collegeYear,
+        dob: dob,
+        bio: bio,
+        photos: uploadedPhotos,
+        interests: selectedInterests.toList(),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("🎉 Profile saved successfully!"),
+          backgroundColor: Colors.green.shade600,
+        ),
+      );
+    } catch (e) {
+      _showError("Error saving profile: $e");
+    }
   }
-}
-
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -181,10 +203,7 @@ Future<void> _loadUserData() async {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFFFDEE9),
-                Color(0xFFB5FFFC),
-              ],
+              colors: [Color(0xFFFFDEE9), Color(0xFFB5FFFC)],
             ),
           ),
           child: Column(
@@ -200,8 +219,10 @@ Future<void> _loadUserData() async {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          color: Color(0xFF1b0d14)),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Color(0xFF1b0d14),
+                      ),
                       onPressed: () => Navigator.pop(context),
                       tooltip: 'Back',
                     ),
@@ -229,8 +250,10 @@ Future<void> _loadUserData() async {
                   physics: const BouncingScrollPhysics(),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -242,8 +265,11 @@ Future<void> _loadUserData() async {
                           scrollDirection: Axis.horizontal,
                           children: [
                             ...uploadedPhotos.map(buildPhotoCard),
-                            buildAddPhotoCard(context, primaryColor,
-                            onTap: _pickAndUploadImage),
+                            buildAddPhotoCard(
+                              context,
+                              primaryColor,
+                              onTap: _pickAndUploadImage,
+                            ),
                           ],
                         ),
                       ),
@@ -256,17 +282,60 @@ Future<void> _loadUserData() async {
                         controller: nameController,
                         primaryColor: primaryColor,
                       ),
+                      // 🔹 Gender
                       buildLabeledField(
-                        label: "College",
-                        icon: Icons.school_outlined,
-                        controller: collegeController,
+                        label: "Gender",
+                        icon: Icons.wc_outlined,
+                        controller:
+                            collegeController, // reuse the same controller or rename to genderController
                         primaryColor: primaryColor,
                       ),
+
+                      // 🔹 College Year
                       buildLabeledField(
-                        label: "Major",
-                        icon: Icons.menu_book_outlined,
-                        controller: majorController,
+                        label: "College Year",
+                        icon: Icons.calendar_today_outlined,
+                        controller:
+                            majorController, // reuse or rename to yearController
                         primaryColor: primaryColor,
+                      ),
+
+                      // 🔹 Date of Birth
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text("Date of Birth", style: fieldLabelStyle()),
+                      ),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime(2000),
+                            firstDate: DateTime(1970),
+                            lastDate: DateTime(DateTime.now().year - 16),
+                          );
+                          if (pickedDate != null) {
+                            setState(() {
+                              dobController.text =
+                                  "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+                            });
+                          }
+                        },
+                        child: AbsorbPointer(
+                          child: TextField(
+                            controller: dobController,
+                            decoration: InputDecoration(
+                              hintText: "Select your birth date",
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.7),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              suffixIcon: const Icon(Icons.date_range),
+                            ),
+                          ),
+                        ),
                       ),
 
                       // ✍️ Bio
@@ -293,8 +362,10 @@ Future<void> _loadUserData() async {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide:
-                                BorderSide(color: primaryColor, width: 2),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 2,
+                            ),
                           ),
                         ),
                       ),
@@ -313,7 +384,7 @@ Future<void> _loadUserData() async {
                             "Gaming",
                             "Music",
                             "Movies",
-                            "Tech"
+                            "Tech",
                           ])
                             ChoiceChip(
                               label: Text(interest),
@@ -345,8 +416,8 @@ Future<void> _loadUserData() async {
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content:
-                                    Text("Quiz feature coming soon!")),
+                              content: Text("Quiz feature coming soon!"),
+                            ),
                           );
                         },
                         child: buildPersonalityQuizCard(),
@@ -359,8 +430,10 @@ Future<void> _loadUserData() async {
               // 🩷 Complete Button
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.8),
                   boxShadow: [
@@ -368,7 +441,7 @@ Future<void> _loadUserData() async {
                       color: Colors.black12,
                       blurRadius: 8,
                       offset: const Offset(0, -2),
-                    )
+                    ),
                   ],
                 ),
                 child: ElevatedButton(
