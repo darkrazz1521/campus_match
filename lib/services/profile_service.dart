@@ -61,6 +61,7 @@ class ProfileService {
   required String bio,
   required List<String> photos,
   required List<String> interests,
+  required String branch,
 }) async {
   final uid = getCurrentUserId();
   if (uid == null) return;
@@ -73,6 +74,7 @@ class ProfileService {
     'bio': bio,
     'photos': photos,
     'interests': interests,
+    'branch': branch,
     'profileCompleted': true,
     'updatedAt': FieldValue.serverTimestamp(),
   }, SetOptions(merge: true));

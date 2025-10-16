@@ -69,7 +69,7 @@ Future<String?> resendVerificationEmail({String? email, String? password}) async
   try {
     User? user = _auth.currentUser;
 
-    // If user is not logged in, sign them in temporarily
+    // Temporarily login if not already
     if (user == null && email != null && password != null) {
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -86,18 +86,26 @@ Future<String?> resendVerificationEmail({String? email, String? password}) async
 
     if (!user.emailVerified) {
       await user.sendEmailVerification();
-      await _auth.signOut(); // keep them logged out
-      return null; // success
+      await _auth.signOut();
+      return null; // Success
     } else {
       await _auth.signOut();
       return "Email already verified.";
     }
   } on FirebaseAuthException catch (e) {
-    return e.message ?? "Failed to resend verification email.";
+    // ✅ Friendly messages for rate limit or other issues
+    if (e.code == 'too-many-requests') {
+      return "You've requested too many emails. Please wait a few minutes before trying again.";
+    } else if (e.code == 'network-request-failed') {
+      return "Network error. Please check your connection.";
+    } else {
+      return e.message ?? "Failed to resend verification email. Please try again.";
+    }
   } catch (e) {
-    return "Something went wrong while resending email.";
+    return "Something went wrong while resending the email.";
   }
 }
+
 
 
   /// ✅ Update Firestore after email verification
@@ -116,34 +124,45 @@ Future<void> updateEmailVerifiedStatus() async {
 
   /// 🔐 Login user and verify status
   Future<String?> loginUser({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(email: email, password: password);
+  required String email,
+  required String password,
+}) async {
+  try {
+    UserCredential userCredential =
+        await _auth.signInWithEmailAndPassword(email: email, password: password);
 
-      final user = userCredential.user;
+    final user = userCredential.user;
 
-      if (user != null && !user.emailVerified) {
+    if (user != null) {
+      await user.reload(); // 🔹 Refresh the latest emailVerified status
+
+      if (user.emailVerified) {
+        // 🔹 Update Firestore emailVerified field
+        await _firestore.collection('users').doc(user.uid).update({
+          'emailVerified': true,
+        });
+        return null; // login success
+      } else {
         await _auth.signOut();
         return 'Please verify your email before logging in.';
       }
+    }
 
-      return null; // success
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          return 'No user found with this email.';
-        case 'wrong-password':
-          return 'Incorrect password.';
-        case 'invalid-email':
-          return 'Invalid email format.';
-        default:
-          return 'Login failed. Please try again.';
-      }
+    return 'Login failed. Please try again.';
+  } on FirebaseAuthException catch (e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No user found with this email.';
+      case 'wrong-password':
+        return 'Incorrect password.';
+      case 'invalid-email':
+        return 'Invalid email format.';
+      default:
+        return 'Login failed. Please try again.';
     }
   }
+}
+
 
   /// 🚪 Logout
   Future<void> logout() async => await _auth.signOut();

@@ -4,6 +4,8 @@ import 'swiping_screen.dart';
 import 'chat_screen.dart';
 import 'confessions_screen.dart';
 import 'profile_screen.dart';
+import 'settings_screen.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,26 +21,22 @@ class _HomeScreenState extends State<HomeScreen> {
   final Color accentColor = const Color(0xFF9A4C73);
 
   final List<Widget> _pages = const [
-    SwipingScreen(), // ❤️ Tinder-style swiping
+    SwipingScreen(),
     ChatScreen(),
     ConfessionsScreen(),
     ProfileSetupScreen(),
   ];
 
-  // 🌈 Romantic gradient background
   final Gradient bgGradient = const LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color(0xFFFFDEE9), // soft pink
-      Color(0xFFB5FFFC), // light aqua
-    ],
+    colors: [Color(0xFFFFDEE9), Color(0xFFB5FFFC)],
   );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true, // 👈 lets gradient show behind AppBar
+      extendBodyBehindAppBar: true,
       appBar: _selectedIndex == 0
           ? AppBar(
               backgroundColor: Colors.transparent,
@@ -53,30 +51,40 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               actions: [
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationsScreen(),
+                      ),
+                    );
+                  },
                   icon: const Icon(Icons.notifications, color: Colors.black87),
                 ),
+
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // 👇 Navigate to settings page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
+                  },
                   icon: const Icon(Icons.settings, color: Colors.black87),
                 ),
               ],
             )
-          : null, // 👈 Hide AppBar for other tabs
+          : null,
 
       body: Container(
-        decoration: BoxDecoration(
-          gradient: bgGradient,
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: SafeArea(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: _pages,
-          ),
+          child: IndexedStack(index: _selectedIndex, children: _pages),
         ),
       ),
 
-      // 🌸 Elegant bottom navigation
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
@@ -90,11 +98,17 @@ class _HomeScreenState extends State<HomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.favorite), label: "Home"),
           BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
+            icon: Icon(Icons.chat_bubble_outline),
+            label: "Chat",
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_outlined), label: "Confessions"),
+            icon: Icon(Icons.people_alt_outlined),
+            label: "Confessions",
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: "Profile"),
+            icon: Icon(Icons.person_outline),
+            label: "Profile",
+          ),
         ],
       ),
     );

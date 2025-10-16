@@ -21,6 +21,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController majorController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
   final TextEditingController dobController = TextEditingController();
+  final TextEditingController branchController = TextEditingController();
 
   final ProfileService _profileService = ProfileService();
 
@@ -50,6 +51,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       collegeController.text = userData['gender'] ?? '';
       majorController.text = userData['collegeYear'] ?? '';
       dobController.text = userData['dob'] ?? '';
+      branchController.text = userData['branch'] ?? '';
       bioController.text = userData['bio'] ?? '';
 
       uploadedPhotos.clear();
@@ -74,6 +76,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     collegeController.dispose();
     majorController.dispose();
     dobController.dispose();
+    branchController.dispose();
     bioController.dispose();
     super.dispose();
   }
@@ -125,10 +128,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final collegeYear = majorController.text.trim();
     final dob = dobController.text.trim();
     final bio = bioController.text.trim();
+    final branch = branchController.text.trim();
 
-    if (name.isEmpty || gender.isEmpty || collegeYear.isEmpty || dob.isEmpty) {
+    if (name.isEmpty ||
+        gender.isEmpty ||
+        collegeYear.isEmpty ||
+        dob.isEmpty ||
+        branch.isEmpty) {
       _showError(
-        "Please fill all fields: Name, Gender, College Year, and DOB.",
+        "Please fill all fields: Name, Gender, College Year, Branch, and DOB.",
       );
       return;
     }
@@ -159,6 +167,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         bio: bio,
         photos: uploadedPhotos,
         interests: selectedInterests.toList(),
+        branch: branch,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -282,21 +291,70 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         controller: nameController,
                         primaryColor: primaryColor,
                       ),
-                      // 🔹 Gender
-                      buildLabeledField(
-                        label: "Gender",
-                        icon: Icons.wc_outlined,
-                        controller:
-                            collegeController, // reuse the same controller or rename to genderController
-                        primaryColor: primaryColor,
+                      // 🔹 Gender Dropdown
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text("Gender", style: fieldLabelStyle()),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: collegeController.text.isEmpty
+                            ? null
+                            : collegeController.text,
+                        items: ["Male", "Female", "Other"]
+                            .map(
+                              (g) => DropdownMenuItem(value: g, child: Text(g)),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => collegeController.text = val ?? ''),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.7),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          hintText: "Select Gender",
+                        ),
                       ),
 
-                      // 🔹 College Year
+                      // 🔹 College Year Dropdown (1–5)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text("College Year", style: fieldLabelStyle()),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: majorController.text.isEmpty
+                            ? null
+                            : majorController.text,
+                        items: List.generate(5, (i) => "${i + 1}")
+                            .map(
+                              (y) => DropdownMenuItem(
+                                value: y,
+                                child: Text("Year $y"),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => majorController.text = val ?? ''),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.7),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          hintText: "Select Year",
+                        ),
+                      ),
+
+                      // 🔹 Branch Field
                       buildLabeledField(
-                        label: "College Year",
-                        icon: Icons.calendar_today_outlined,
-                        controller:
-                            majorController, // reuse or rename to yearController
+                        label: "Branch",
+                        icon: Icons.school_outlined,
+                        controller: branchController,
                         primaryColor: primaryColor,
                       ),
 

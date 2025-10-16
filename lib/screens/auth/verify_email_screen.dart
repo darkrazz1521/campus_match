@@ -6,7 +6,8 @@ import 'dart:async';
 
 class VerifyEmailScreen extends StatefulWidget {
   final String email;
-  const VerifyEmailScreen({super.key, required this.email});
+  final String password; // added password
+  const VerifyEmailScreen({super.key, required this.email, required this.password});
 
   @override
   State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
@@ -17,16 +18,17 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   bool _isResending = false;
   bool _isChecking = false;
 
-  
-
+  // ✅ Check if user verified email
   Future<void> _checkVerification() async {
     setState(() => _isChecking = true);
     await Future.delayed(const Duration(seconds: 2)); // smooth UX
-    await _auth.logout(); // refresh auth state
+
+    // Login temporarily with known password
     String? error = await _auth.loginUser(
       email: widget.email,
-      password: '', // placeholder (we don’t know password here)
+      password: widget.password, // use password
     );
+
     setState(() => _isChecking = false);
 
     if (error == 'Please verify your email before logging in.') {
@@ -34,6 +36,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         const SnackBar(content: Text('Still not verified. Try again later.')),
       );
     } else {
+      // Update Firestore emailVerified status
+      await _auth.updateEmailVerifiedStatus();
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -41,9 +46,15 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     }
   }
 
+  // ✅ Resend verification email
   Future<void> _resendEmail() async {
     setState(() => _isResending = true);
-    final error = await _auth.resendVerificationEmail();
+
+    final error = await _auth.resendVerificationEmail(
+      email: widget.email, 
+      password: widget.password, // pass password
+    );
+
     setState(() => _isResending = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -94,7 +105,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                
                 
                 ElevatedButton.icon(
                   onPressed: _isChecking ? null : _checkVerification,

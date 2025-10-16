@@ -8,9 +8,7 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const CampusMatchApp());
 }
 
@@ -32,9 +30,13 @@ class CampusMatchApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
         '/verify-email': (context) {
-      final email = ModalRoute.of(context)!.settings.arguments as String;
-      return VerifyEmailScreen(email: email);
-    },
+          final args =
+              ModalRoute.of(context)!.settings.arguments as Map<String, String>;
+          return VerifyEmailScreen(
+            email: args['email']!,
+            password: args['password']!,
+          );
+        },
       },
     );
   }

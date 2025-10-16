@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dart:math';
 import 'login_screen.dart';
 import '../../services/auth_service.dart';
+import 'verify_email_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -114,8 +115,17 @@ class _RegisterScreenState extends State<RegisterScreen>
   setState(() => _isLoading = false);
 
   if (error == null) {
-  Navigator.pushReplacementNamed(context, '/verify-email', arguments: email);
-} else {
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => VerifyEmailScreen(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(), // Pass password here
+      ),
+    ),
+  );
+}
+else {
   _showSnackBar(error);
 }
 
