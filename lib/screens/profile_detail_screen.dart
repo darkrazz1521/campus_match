@@ -7,7 +7,7 @@ import '../models/user_model.dart';
 class ProfileDetailScreen extends StatelessWidget {
   final UserModel profile;
 
-  const ProfileDetailScreen({Key? key, required this.profile}) : super(key: key);
+  const ProfileDetailScreen({super.key, required this.profile});
 
   final Color primaryColor = const Color(0xFFF04299);
   final Color accentColor = const Color(0xFF9A4C73);

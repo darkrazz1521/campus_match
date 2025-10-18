@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'auth/login_screen.dart';
+import 'filter_screen.dart';
+import '../models/user_model.dart';
+import '../services/user_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,17 +16,15 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen>
     with TickerProviderStateMixin {
   final Color accentColor = const Color(0xFF9A4C73);
+  final UserService _userService = UserService.instance;
 
   final Gradient bgGradient = const LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color(0xFFFFDEE9),
-      Color(0xFFB5FFFC),
-    ],
+    colors: [Color(0xFFFFDEE9), Color(0xFFB5FFFC)],
   );
 
-  late AnimationController _screenAnimController;
+  late final AnimationController _screenAnimController;
 
   @override
   void initState() {
@@ -45,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       await FirebaseAuth.instance.signOut();
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -60,7 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       child: Row(
         children: [
           Expanded(
-              child: Divider(color: Colors.grey.withOpacity(0.2), thickness: 1)),
+              child:
+                  Divider(color: Colors.grey.withOpacity(0.2), thickness: 1)),
           const SizedBox(width: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -80,7 +82,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
           const SizedBox(width: 10),
           Expanded(
-              child: Divider(color: Colors.grey.withOpacity(0.2), thickness: 1)),
+              child:
+                  Divider(color: Colors.grey.withOpacity(0.2), thickness: 1)),
         ],
       ),
     );
@@ -136,13 +139,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                   child: Icon(
                     icon,
                     color: accentColor,
-                    shadows: [
-                      Shadow(
-                        color: accentColor.withOpacity(0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -153,25 +149,21 @@ class _SettingsScreenState extends State<SettingsScreen>
                       Text(
                         title,
                         style: GoogleFonts.beVietnamPro(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
+                            fontWeight: FontWeight.w600, fontSize: 16),
                       ),
                       if (subtitle != null)
                         Text(
                           subtitle,
                           style: GoogleFonts.beVietnamPro(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                          ),
+                              color: Colors.grey[600], fontSize: 13),
                         ),
                     ],
                   ),
                 ),
                 if (badgeText != null)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.red.shade300,
                       borderRadius: BorderRadius.circular(12),
@@ -216,10 +208,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.red.withOpacity(isPressed ? 0.4 : 0.2),
-                blurRadius: isPressed ? 12 : 8,
-                offset: const Offset(0, 4),
-              ),
+                  color: Colors.red.withOpacity(isPressed ? 0.4 : 0.2),
+                  blurRadius: isPressed ? 12 : 8,
+                  offset: const Offset(0, 4)),
             ],
           ),
           child: Row(
@@ -230,26 +221,15 @@ class _SettingsScreenState extends State<SettingsScreen>
               Text(
                 "Logout",
                 style: GoogleFonts.beVietnamPro(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.white,
-                ),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.white),
               ),
             ],
           ),
         ),
       );
     });
-  }
-
-  Widget _animatedDivider() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      height: 1,
-      width: MediaQuery.of(context).size.width * 0.8,
-      color: Colors.grey.withOpacity(0.2),
-      margin: const EdgeInsets.only(left: 60),
-    );
   }
 
   @override
@@ -267,10 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         title: Text(
           "Settings & Privacy",
           style: GoogleFonts.beVietnamPro(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+              fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
       ),
       body: Container(
@@ -281,8 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             opacity: CurvedAnimation(
                 parent: _screenAnimController, curve: Curves.easeInOut),
             child: SlideTransition(
-              position: Tween<Offset>(
-                      begin: const Offset(0, 0.1), end: Offset.zero)
+              position: Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
                   .animate(CurvedAnimation(
                       parent: _screenAnimController, curve: Curves.easeOut)),
               child: SingleChildScrollView(
@@ -298,7 +274,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                         title: "Edit Profile",
                         subtitle: "Update your personal information",
                       ),
-                      _animatedDivider(),
                       _buildListItem(
                         icon: Icons.settings_outlined,
                         title: "Account Settings",
@@ -310,7 +285,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                         title: "Privacy Controls",
                         subtitle: "Manage your privacy settings",
                       ),
-                      _animatedDivider(),
                       _buildListItem(
                         icon: Icons.people_outline,
                         title: "Blocked Users",
@@ -323,13 +297,40 @@ class _SettingsScreenState extends State<SettingsScreen>
                         title: "Upgrade to Premium",
                         subtitle: "Unlock all premium features",
                       ),
+
+                      // ✅ Premium Filter Option
+                      FutureBuilder<UserModel?>(
+                        future: _userService.getUserById(
+                            FirebaseAuth.instance.currentUser!.uid),
+                        builder: (context, snap) {
+                          final isPremium = snap.data?.isPremium ?? false;
+
+                          return _buildListItem(
+                            icon: Icons.filter_alt_outlined,
+                            title: "Filters",
+                            subtitle: isPremium
+                                ? "Set branch, year, interests & location"
+                                : "Premium feature: Upgrade to unlock",
+                            badgeText: isPremium ? null : "Premium",
+                            onTap: isPremium
+                                ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => const FiltersScreen()),
+                                    );
+                                  }
+                                : null,
+                          );
+                        },
+                      ),
+
                       _sectionHeader("Support"),
                       _buildListItem(
                         icon: Icons.help_outline,
                         title: "Help Center",
                         subtitle: "Get answers and support",
                       ),
-                      _animatedDivider(),
                       _buildListItem(
                         icon: Icons.mail_outline,
                         title: "Contact Us",
@@ -348,4 +349,3 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 }
-//rewrite your SettingsScreen with optimized animations and lazy loading to eliminate skipped frames while keeping all your gradients and styles.

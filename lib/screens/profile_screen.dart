@@ -298,7 +298,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        value: collegeController.text.isEmpty
+                        initialValue: collegeController.text.isEmpty
                             ? null
                             : collegeController.text,
                         items: ["Male", "Female", "Other"]
@@ -326,7 +326,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
-                        value: majorController.text.isEmpty
+                        initialValue: majorController.text.isEmpty
                             ? null
                             : majorController.text,
                         items: List.generate(5, (i) => "${i + 1}")

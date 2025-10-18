@@ -14,13 +14,24 @@ class UserModel {
   final List<String> passedUsers;
   final List<String> matches;
 
+  // NEW: super-liked tracking + undo counts and daily counters
+  final List<String> superLikedUsers;
+
   final bool isPremium;
-  final int dailySwipeCount; 
+  final int dailySwipeCount;
   final DateTime? lastSwipeDate;
 
-  // 🔹 New optional fields for computed data
-  final double matchScore; // calculated in matchmaking
-  final String distance;   // formatted like "3 km away"
+  // NEW: undo/super-like daily usage tracking
+  final int undosUsedToday;
+  final DateTime? lastUndoDate;
+  final int superLikesUsedToday;
+  final DateTime? lastSuperLikeDate;
+
+  // NEW: computed fields used in UI
+  final double matchScore;
+  final String distance;
+  final String? lastSwipedUserId;
+
 
   UserModel({
     required this.uid,
@@ -35,11 +46,17 @@ class UserModel {
     this.likedUsers = const [],
     this.passedUsers = const [],
     this.matches = const [],
-    this.matchScore = 0.0,       // default when not provided
-    this.distance = 'Unknown',   // default when not provided
-    this.isPremium = false, // Default to free
+    this.superLikedUsers = const [],
+    this.isPremium = false,
+    this.lastSwipedUserId,
     this.dailySwipeCount = 0,
     this.lastSwipeDate,
+    this.undosUsedToday = 0,
+    this.lastUndoDate,
+    this.superLikesUsedToday = 0,
+    this.lastSuperLikeDate,
+    this.matchScore = 0.0,
+    this.distance = 'Unknown',
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -56,11 +73,28 @@ class UserModel {
       likedUsers: List<String>.from(json['likedUsers'] ?? []),
       passedUsers: List<String>.from(json['passedUsers'] ?? []),
       matches: List<String>.from(json['matches'] ?? []),
+      superLikedUsers: List<String>.from(json['superLikedUsers'] ?? []),
       matchScore: (json['matchScore'] ?? 0).toDouble(),
       distance: json['distance'] ?? 'Unknown',
       isPremium: json['isPremium'] ?? false,
       dailySwipeCount: json['dailySwipeCount'] ?? 0,
-      lastSwipeDate: (json['lastSwipeDate'] as Timestamp?)?.toDate(),
+      lastSwipeDate:
+          (json['lastSwipeDate'] as Timestamp?)?.toDate() ??
+          (json['lastSwipeDate'] is String
+              ? DateTime.tryParse(json['lastSwipeDate'])
+              : null),
+      undosUsedToday: json['undosUsedToday'] ?? 0,
+      lastUndoDate:
+          (json['lastUndoDate'] as Timestamp?)?.toDate() ??
+          (json['lastUndoDate'] is String
+              ? DateTime.tryParse(json['lastUndoDate'])
+              : null),
+      superLikesUsedToday: json['superLikesUsedToday'] ?? 0,
+    lastSuperLikeDate: (json['lastSuperLikeDate'] as Timestamp?)?.toDate() ??
+        (json['lastSuperLikeDate'] is String
+            ? DateTime.tryParse(json['lastSuperLikeDate'])
+            : null),
+      lastSwipedUserId: json['lastSwipedUserId'], // 🆕 Add this
     );
   }
 
@@ -78,21 +112,31 @@ class UserModel {
       'likedUsers': likedUsers,
       'passedUsers': passedUsers,
       'matches': matches,
+      'superLikedUsers': superLikedUsers,
       'matchScore': matchScore,
       'distance': distance,
       'isPremium': isPremium,
       'dailySwipeCount': dailySwipeCount,
       'lastSwipeDate': lastSwipeDate,
+      'undosUsedToday': undosUsedToday,
+      'lastUndoDate': lastUndoDate,
+      'superLikesUsedToday': superLikesUsedToday,
+      'lastSuperLikeDate': lastSuperLikeDate,
+      'lastSwipedUserId': lastSwipedUserId,
     };
   }
 
-  // Optional: convenience copyWith() method (useful later for updating matchScore/distance)
   UserModel copyWith({
     double? matchScore,
     String? distance,
     bool? isPremium,
     int? dailySwipeCount,
     DateTime? lastSwipeDate,
+    int? undosUsedToday,
+    DateTime? lastUndoDate,
+    int? superLikesUsedToday,
+    DateTime? lastSuperLikeDate,
+    String? lastSwipedUserId,
   }) {
     return UserModel(
       uid: uid,
@@ -107,11 +151,17 @@ class UserModel {
       likedUsers: likedUsers,
       passedUsers: passedUsers,
       matches: matches,
+      superLikedUsers: superLikedUsers,
       matchScore: matchScore ?? this.matchScore,
       distance: distance ?? this.distance,
       isPremium: isPremium ?? this.isPremium,
       dailySwipeCount: dailySwipeCount ?? this.dailySwipeCount,
       lastSwipeDate: lastSwipeDate ?? this.lastSwipeDate,
+      undosUsedToday: undosUsedToday ?? this.undosUsedToday,
+      lastUndoDate: lastUndoDate ?? this.lastUndoDate,
+      superLikesUsedToday: superLikesUsedToday ?? this.superLikesUsedToday,
+      lastSuperLikeDate: lastSuperLikeDate ?? this.lastSuperLikeDate,
+      lastSwipedUserId: lastSwipedUserId?? this.lastSwipedUserId,
     );
   }
 }

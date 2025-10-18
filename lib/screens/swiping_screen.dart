@@ -11,7 +11,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:async';
 
-
 class SwipingScreen extends StatefulWidget {
   const SwipingScreen({super.key});
 
@@ -22,6 +21,8 @@ class SwipingScreen extends StatefulWidget {
 class _SwipingScreenState extends State<SwipingScreen>
     with SingleTickerProviderStateMixin {
   final CardSwiperController _swiperController = CardSwiperController();
+  int _currentCardIndex = 0;
+
   late AnimationController _animationController;
 
   List<UserModel> profiles = [];
@@ -31,9 +32,9 @@ class _SwipingScreenState extends State<SwipingScreen>
   final UserService _userService = UserService.instance;
   final MatchmakingService _matchmakingService = MatchmakingService.instance;
 
-  int _undosUsedToday = 0;
-  int _maxFreeUndos = 1;
-  bool _isMatchFound = false;
+  final int _undosUsedToday = 0;
+  final int _maxFreeUndos = 1;
+  final bool _isMatchFound = false;
 
   @override
   void initState() {
@@ -45,6 +46,7 @@ class _SwipingScreenState extends State<SwipingScreen>
     );
     _loadProfiles();
   }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -66,14 +68,39 @@ class _SwipingScreenState extends State<SwipingScreen>
         DateTime.now(),
         userData.lastSwipeDate ?? DateTime(2000),
       );
-      final hasLimit = !userData.isPremium &&
-          userData.dailySwipeCount >= 50 &&
-          !isNewDay;
+      final hasLimit =
+          !userData.isPremium && userData.dailySwipeCount >= 50 && !isNewDay;
 
-      final fetchedUsers = await _userService.getAllUsers(currentUid);
-      final processedUsers = await _matchmakingService.processMatches(
-        fetchedUsers,
-      );
+      if (isNewDay && mounted) {
+        // notify user that swipes reset
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Your swipes have been reset for today!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // ✅ 1. Fetch all users
+final fetchedUsers = await _userService.getAllUsers(currentUid);
+
+// ✅ 2. Load user’s saved filter preferences
+final filterPrefs = await _userService.getFilterPreferences(currentUid);
+
+// ✅ 3. Apply filters only for premium users
+List<UserModel> processedUsers;
+if (userData.isPremium && filterPrefs != null) {
+  processedUsers = await _matchmakingService.processMatches(
+    users: fetchedUsers,
+    filters: filterPrefs, // apply saved filters here
+  );
+} else {
+  processedUsers = await _matchmakingService.processMatches(
+    users: fetchedUsers,
+  );
+}
+
+
 
       setState(() {
         profiles = processedUsers;
@@ -94,46 +121,107 @@ class _SwipingScreenState extends State<SwipingScreen>
     }
   }
 
-  Widget _buildProfileImage(String photoData) {
-  if (photoData.startsWith('http')) {
-    // It's a normal URL
-    return Image.network(
-      photoData,
-      width: double.infinity,
-      height: double.infinity,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          color: Colors.grey.shade200,
-          child: const Center(
-            child: CircularProgressIndicator(color: Colors.pinkAccent),
+  void _showMatchDialog(UserModel matched) {
+    showGeneralDialog(
+      context: context,
+      barrierLabel: "match",
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.6),
+      transitionDuration: const Duration(milliseconds: 600),
+      pageBuilder: (context, anim1, anim2) {
+        return Center(
+          child: ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
+            child: Container(
+              width: 300,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.pinkAccent.withOpacity(0.3),
+                    blurRadius: 20,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.celebration,
+                    size: 48,
+                    color: Colors.pinkAccent,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "It's a Match!",
+                    style: GoogleFonts.beVietnamPro(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    matched.name,
+                    style: GoogleFonts.beVietnamPro(fontSize: 18),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.pinkAccent,
+                    ),
+                    child: const Text("Say Hi"),
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
     );
-  } else {
-    // Assume it's Base64
-    try {
-      final bytes = const Base64Decoder().convert(photoData);
-      return Image.memory(
-        bytes,
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-      );
-    } catch (e) {
-      print('Error decoding Base64 image: $e');
+  }
+
+  Widget _buildProfileImage(String photoData) {
+    if (photoData.startsWith('http')) {
+      // It's a normal URL
       return Image.network(
-        'https://via.placeholder.com/400x600.png?text=Invalid+Image',
+        photoData,
         width: double.infinity,
         height: double.infinity,
         fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: CircularProgressIndicator(color: Colors.pinkAccent),
+            ),
+          );
+        },
       );
+    } else {
+      // Assume it's Base64
+      try {
+        final bytes = const Base64Decoder().convert(photoData);
+        return Image.memory(
+          bytes,
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.cover,
+        );
+      } catch (e) {
+        print('Error decoding Base64 image: $e');
+        return Image.network(
+          'https://via.placeholder.com/400x600.png?text=Invalid+Image',
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.cover,
+        );
+      }
     }
   }
-}
-
 
   final Color primaryColor = const Color(0xFFF04299);
   final Color accentColor = const Color(0xFF9A4C73);
@@ -172,63 +260,69 @@ class _SwipingScreenState extends State<SwipingScreen>
                 child: CircularProgressIndicator(color: Colors.pinkAccent),
               )
             : profiles.isEmpty
-                ? _buildEmptyState()
-                : Padding(
-                    padding: const EdgeInsets.only(top: 80, bottom: 100),
-                    child: CardSwiper(
-                      controller: _swiperController,
-                      cardsCount: profiles.length,
-                      numberOfCardsDisplayed: 2,
-                      backCardOffset: const Offset(0, 25),
-                      padding: const EdgeInsets.all(8),
-                      onSwipe:
-                          (previousIndex, currentIndex, direction) async {
-                        if (previousIndex == null) return false;
+            ? _buildEmptyState()
+            : Padding(
+                padding: const EdgeInsets.only(top: 80, bottom: 100),
+                child: CardSwiper(
+                  controller: _swiperController,
+                  cardsCount: profiles.length,
+                  numberOfCardsDisplayed: 2,
+                  backCardOffset: const Offset(0, 25),
+                  padding: const EdgeInsets.all(8),
+                  onSwipe: (previousIndex, currentIndex, direction) async {
+                    _currentCardIndex = currentIndex ?? 0;
 
-                        // 🚫 Swipe Limit Check
-                        if (!canSwipe) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  "Daily swipe limit reached! Go Premium for unlimited swipes."),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                          return false;
-                        }
-
-                        final swipedUser = profiles[previousIndex];
-                        final currentUid =
-                            FirebaseAuth.instance.currentUser!.uid;
-
-                        final success = await _userService.updateSwipe(
-                          currentUid: currentUid,
-                          targetUid: swipedUser.uid,
-                          liked: direction == CardSwiperDirection.right,
-                        );
-
-                        // Reload profiles if close to limit
-                        if (!isPremium &&
-                            (profiles.length - (currentIndex ?? 0)) <= 5) {
-                          _loadProfiles();
-                        }
-
-                        return success;
-                      },
-                      cardBuilder: (context, index, percentX, percentY) {
-                        final profile = profiles[index];
-                        return Transform.translate(
-                          offset: Offset(percentX * 10, percentY * 5),
-                          child: Transform.scale(
-                            scale: 1 - (percentY.abs() * 0.05),
-                            child: _profileCard(profile, percentX.toDouble()),
+                    if (!canSwipe) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Daily swipe limit reached! Go Premium for unlimited swipes.",
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return false;
+                    }
+
+                    final swipedUser = profiles[previousIndex];
+                    final currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+                    final res = await _userService.updateSwipe(
+                      currentUid: currentUid,
+                      targetUid: swipedUser.uid,
+                      liked: direction == CardSwiperDirection.right,
+                      superLike: false,
+                    );
+
+                    // If a match occurred -> show animation
+                    if (res['success'] == true && res['isMatch'] == true) {
+                      _showMatchDialog(swipedUser);
+                    }
+
+                    // Reload profiles if close to limit
+                    if (!isPremium &&
+                        (profiles.length - (currentIndex ?? 0)) <= 5) {
+                      _loadProfiles();
+                    }
+
+                    return res['success'] == true;
+                  },
+
+                  cardBuilder: (context, index, percentX, percentY) {
+                    final profile = profiles[index];
+                    return Transform.translate(
+                      offset: Offset(percentX * 10, percentY * 5),
+                      child: Transform.scale(
+                        scale: 1 - (percentY.abs() * 0.05),
+                        child: _profileCard(profile, percentX.toDouble()),
+                      ),
+                    );
+                  },
+                ),
+              ),
 
         // ❤️ Swipe Buttons
+        // ❤️ Swipe Buttons (replaced)
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: Row(
@@ -244,18 +338,67 @@ class _SwipingScreenState extends State<SwipingScreen>
                 primaryColor,
                 () => _swiperController.swipe(CardSwiperDirection.right),
               ),
-              _glowButton(
-                isPremium ? Icons.star : Icons.undo,
-                isPremium ? Colors.blueAccent : Colors.grey,
-                isPremium
-                    ? () {
-                        // ⭐ Super Like logic
+
+              // Third button: undo for free / super-like for premium
+              FutureBuilder<UserModel?>(
+                future: _userService.getUserById(
+                  FirebaseAuth.instance.currentUser!.uid,
+                ),
+                builder: (context, snap) {
+                  final isPremiumLocal = snap.data?.isPremium ?? isPremium;
+                  final icon = isPremiumLocal ? Icons.star : Icons.undo;
+                  final color = isPremiumLocal
+                      ? Colors.blueAccent
+                      : Colors.grey;
+                  return _glowButton(icon, color, () async {
+                    if (isPremiumLocal) {
+                      // Super like flow
+                      final currentUid = FirebaseAuth.instance.currentUser!.uid;
+                      final currentUser = await _userService.getUserById(
+                        currentUid,
+                      );
+                      final index = _currentCardIndex;
+                      if (index < 0 || index >= profiles.length) return;
+                      final target = profiles[index];
+                      final res = await _userService.updateSwipe(
+                        currentUid: currentUid,
+                        targetUid: target.uid,
+                        liked: true,
+                        superLike: true,
+                      );
+                      if (res['success'] == true) {
+                        // force swipe right visually
                         _swiperController.swipe(CardSwiperDirection.right);
+                        if (res['isMatch'] == true) {
+                          _showMatchDialog(target);
+                        }
+                      } else {
+                        final msg = res['message'] ?? 'Super Like failed';
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(msg)));
                       }
-                    : () {
-                        // 🕒 Undo logic
-                        _swiperController.undo();
-                      },
+                    } else {
+                      // Undo for free user - check / consume
+                      final uid = FirebaseAuth.instance.currentUser!.uid;
+                      final allowed = await _userService.consumeUndo(
+                        uid,
+                        maxFreeUndos: _maxFreeUndos,
+                      );
+                      if (!allowed) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "No undos left today. Upgrade to Premium for more.",
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      _swiperController.undo();
+                    }
+                  });
+                },
               ),
             ],
           ),
@@ -274,8 +417,7 @@ class _SwipingScreenState extends State<SwipingScreen>
           context,
           PageRouteBuilder(
             transitionDuration: const Duration(milliseconds: 500),
-            pageBuilder: (_, __, ___) =>
-                ProfileDetailScreen(profile: profile),
+            pageBuilder: (_, __, ___) => ProfileDetailScreen(profile: profile),
           ),
         );
       },
@@ -311,14 +453,13 @@ class _SwipingScreenState extends State<SwipingScreen>
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOut,
                     child: profile.photos.isNotEmpty
-    ? _buildProfileImage(profile.photos.first)
-    : Image.network(
-        'https://via.placeholder.com/400x600.png?text=No+Image',
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-      ),
-
+                        ? _buildProfileImage(profile.photos.first)
+                        : Image.network(
+                            'https://via.placeholder.com/400x600.png?text=No+Image',
+                            width: double.infinity,
+                            height: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
                   ),
                 ),
                 Container(
@@ -356,8 +497,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                         ),
                         child: Row(
                           children: const [
-                            Icon(Icons.favorite,
-                                color: Colors.green, size: 24),
+                            Icon(Icons.favorite, color: Colors.green, size: 24),
                             SizedBox(width: 4),
                             Text(
                               "LIKE",
@@ -396,8 +536,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                         ),
                         child: Row(
                           children: const [
-                            Icon(Icons.close,
-                                color: Colors.red, size: 24),
+                            Icon(Icons.close, color: Colors.red, size: 24),
                             SizedBox(width: 4),
                             Text(
                               "NOPE",
@@ -472,8 +611,9 @@ class _SwipingScreenState extends State<SwipingScreen>
                                 child: LinearProgressIndicator(
                                   value: profile.matchScore,
                                   color: Colors.pinkAccent,
-                                  backgroundColor:
-                                      Colors.white.withOpacity(0.2),
+                                  backgroundColor: Colors.white.withOpacity(
+                                    0.2,
+                                  ),
                                   minHeight: 6,
                                 ),
                               ),
@@ -490,8 +630,7 @@ class _SwipingScreenState extends State<SwipingScreen>
                                   style: const TextStyle(fontSize: 16),
                                 ),
                                 label: Text(like),
-                                backgroundColor:
-                                    Colors.white.withOpacity(0.2),
+                                backgroundColor: Colors.white.withOpacity(0.2),
                                 labelStyle: const TextStyle(
                                   color: Colors.white,
                                 ),
@@ -536,19 +675,21 @@ class _SwipingScreenState extends State<SwipingScreen>
       onTap: onPressed,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()..scale(1.0),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.4),
-              blurRadius: 15,
-              spreadRadius: 2,
+              color: color.withOpacity(0.45),
+              blurRadius: 20,
+              spreadRadius: 3,
             ),
           ],
         ),
         child: CircleAvatar(
           radius: 34,
-          backgroundColor: Colors.white.withOpacity(0.9),
+          backgroundColor: Colors.white.withOpacity(0.95),
           child: Icon(icon, size: 32, color: color),
         ),
       ),
@@ -560,8 +701,7 @@ class _SwipingScreenState extends State<SwipingScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.favorite_border,
-              color: Colors.pinkAccent, size: 80),
+          const Icon(Icons.favorite_border, color: Colors.pinkAccent, size: 80),
           const SizedBox(height: 16),
           Text(
             "No more profiles nearby 💞",
@@ -578,8 +718,7 @@ class _SwipingScreenState extends State<SwipingScreen>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             onPressed: _loadProfiles,
             child: const Text(
