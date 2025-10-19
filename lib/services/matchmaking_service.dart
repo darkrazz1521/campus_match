@@ -36,15 +36,16 @@ class MatchmakingService {
     if (userA.gender != userB.gender) score += 5;
 
     // Similar words in bio (soft text matching)
-    if (userA.bio.split(' ').any((word) => word.length > 2 && userB.bio.contains(word))) {
-      score += 5;
-    }
+    // Similar words in bio (soft text matching)
+if (userA.bio.split(' ').any((word) => word.length > 2 && userB.bio.contains(word))) {
+score += 5;
+}
 
-    // Boost for super-like
-    if (isSuperLikedByA) score += 20; // +0.2 after normalization
+// Boost for super-like (Rule 1: +0.2 to final score)
+if (isSuperLikedByA) score += 20; 
 
-    return (score / 100).clamp(0.0, 1.0);
-  }
+return (score / 100).clamp(0.0, 1.0);
+}
 
   /// Core matching logic — now includes premium filters
   Future<List<UserModel>> processMatches({

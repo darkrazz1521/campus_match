@@ -10,6 +10,9 @@ import '../services/matchmaking_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'package:lottie/lottie.dart';
+import 'package:confetti/confetti.dart';
+
 
 class SwipingScreen extends StatefulWidget {
   const SwipingScreen({super.key});
@@ -24,32 +27,38 @@ class _SwipingScreenState extends State<SwipingScreen>
   int _currentCardIndex = 0;
 
   late AnimationController _animationController;
+  late ConfettiController _confettiController;
 
   List<UserModel> profiles = [];
   bool isLoading = true;
-  bool canSwipe = true; // 🆕 Track swipe capability
-  bool isPremium = false; // 🆕 Track premium status
+  bool canSwipe = true; //  Track swipe capability
+  bool isPremium = false; //  Track premium status
+  String? _lastSwipedUserId;
   final UserService _userService = UserService.instance;
   final MatchmakingService _matchmakingService = MatchmakingService.instance;
 
   final int _undosUsedToday = 0;
   final int _maxFreeUndos = 1;
+  final int _maxPremiumSuperLikes = 10; //  Max Super Likes for Premium users
+  final int _maxPremiumUndos = 10; //  Max Undos after Super Likes are exhausted
   final bool _isMatchFound = false;
 
   @override
   void initState() {
     super.initState();
-    // 🆕 Initialize Animation Controller
+    //  Initialize Animation Controller
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
     _loadProfiles();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _confettiController.dispose();
     super.dispose();
   }
 
@@ -82,31 +91,30 @@ class _SwipingScreenState extends State<SwipingScreen>
       }
 
       // ✅ 1. Fetch all users
-final fetchedUsers = await _userService.getAllUsers(currentUid);
+      final fetchedUsers = await _userService.getAllUsers(currentUid);
 
-// ✅ 2. Load user’s saved filter preferences
-final filterPrefs = await _userService.getFilterPreferences(currentUid);
+      // ✅ 2. Load user’s saved filter preferences
+      final filterPrefs = await _userService.getFilterPreferences(currentUid);
 
-// ✅ 3. Apply filters only for premium users
-List<UserModel> processedUsers;
-if (userData.isPremium && filterPrefs != null) {
-  processedUsers = await _matchmakingService.processMatches(
-    users: fetchedUsers,
-    filters: filterPrefs, // apply saved filters here
-  );
-} else {
-  processedUsers = await _matchmakingService.processMatches(
-    users: fetchedUsers,
-  );
-}
-
-
+      // ✅ 3. Apply filters only for premium users
+      List<UserModel> processedUsers;
+      if (userData.isPremium && filterPrefs != null) {
+        processedUsers = await _matchmakingService.processMatches(
+          users: fetchedUsers,
+          filters: filterPrefs, // apply saved filters here
+        );
+      } else {
+        processedUsers = await _matchmakingService.processMatches(
+          users: fetchedUsers,
+        );
+      }
 
       setState(() {
         profiles = processedUsers;
         isLoading = false;
         isPremium = userData.isPremium;
         canSwipe = userData.isPremium || !hasLimit;
+        _lastSwipedUserId = userData.lastSwipedUserId; // 🆕 Retrieve last swipe
       });
     } catch (e) {
       print("Error loading profiles: $e");
@@ -121,67 +129,94 @@ if (userData.isPremium && filterPrefs != null) {
     }
   }
 
+  
+
+
   void _showMatchDialog(UserModel matched) {
-    showGeneralDialog(
-      context: context,
-      barrierLabel: "match",
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.6),
-      transitionDuration: const Duration(milliseconds: 600),
-      pageBuilder: (context, anim1, anim2) {
-        return Center(
-          child: ScaleTransition(
-            scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
-            child: Container(
-              width: 300,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.pinkAccent.withOpacity(0.3),
-                    blurRadius: 20,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.celebration,
-                    size: 48,
-                    color: Colors.pinkAccent,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "It's a Match!",
-                    style: GoogleFonts.beVietnamPro(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+  _confettiController.play(); // 🎉 Trigger confetti
+
+  showGeneralDialog(
+    context: context,
+    barrierLabel: "match",
+    barrierDismissible: true,
+    barrierColor: Colors.black.withOpacity(0.6),
+    transitionDuration: const Duration(milliseconds: 600),
+    pageBuilder: (context, anim1, anim2) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          // 🎊 Confetti burst behind the dialog
+          ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 30,
+            maxBlastForce: 40,
+            minBlastForce: 20,
+            gravity: 0.3,
+          ),
+
+          Center(
+            child: ScaleTransition(
+              scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
+              child: Container(
+                width: 320,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.pinkAccent.withOpacity(0.3),
+                      blurRadius: 20,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    matched.name,
-                    style: GoogleFonts.beVietnamPro(fontSize: 18),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pinkAccent,
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 🌟 Add Lottie animation on match
+                    Lottie.asset(
+                      'assets/animations/love.json',  // 👈 add your animation
+                      width: 160,
+                      repeat: false,
                     ),
-                    child: const Text("Say Hi"),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Text(
+                      "It's a Match!",
+                      style: GoogleFonts.beVietnamPro(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      matched.name,
+                      style: GoogleFonts.beVietnamPro(fontSize: 18),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.pinkAccent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("Say Hi 💬"),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ],
+      );
+    },
+  );
+}
+
 
   Widget _buildProfileImage(String photoData) {
     if (photoData.startsWith('http')) {
@@ -294,9 +329,15 @@ if (userData.isPremium && filterPrefs != null) {
                       superLike: false,
                     );
 
-                    // If a match occurred -> show animation
-                    if (res['success'] == true && res['isMatch'] == true) {
-                      _showMatchDialog(swipedUser);
+                    if (res['success'] == true) {
+                      setState(() {
+                        _lastSwipedUserId =
+                            swipedUser.uid; // 🆕 Track last successful swipe
+                      });
+                      // If a match occurred -> show animation
+                      if (res['isMatch'] == true) {
+                        _showMatchDialog(swipedUser);
+                      }
                     }
 
                     // Reload profiles if close to limit
@@ -321,7 +362,6 @@ if (userData.isPremium && filterPrefs != null) {
                 ),
               ),
 
-        // ❤️ Swipe Buttons
         // ❤️ Swipe Buttons (replaced)
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
@@ -345,28 +385,41 @@ if (userData.isPremium && filterPrefs != null) {
                   FirebaseAuth.instance.currentUser!.uid,
                 ),
                 builder: (context, snap) {
-                  final isPremiumLocal = snap.data?.isPremium ?? isPremium;
-                  final icon = isPremiumLocal ? Icons.star : Icons.undo;
-                  final color = isPremiumLocal
+                  final currentUserData = snap.data;
+                  final isPremiumLocal =
+                      currentUserData?.isPremium ?? isPremium;
+                  final superLikesUsed =
+                      currentUserData?.superLikesUsedToday ?? 0;
+
+                  // Determine Button Mode (Rule 3)
+                  final bool isSuperLikeMode =
+                      isPremiumLocal && superLikesUsed < _maxPremiumSuperLikes;
+                  final bool isUndoAvailable = _lastSwipedUserId != null;
+
+                  final icon = isSuperLikeMode ? Icons.star : Icons.undo;
+                  final color = isSuperLikeMode
                       ? Colors.blueAccent
-                      : Colors.grey;
+                      : (isUndoAvailable ? Colors.amber : Colors.grey);
+
                   return _glowButton(icon, color, () async {
-                    if (isPremiumLocal) {
-                      // Super like flow
-                      final currentUid = FirebaseAuth.instance.currentUser!.uid;
-                      final currentUser = await _userService.getUserById(
-                        currentUid,
-                      );
+                    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+                    if (isSuperLikeMode) {
+                      // Super like flow (Rule 2 check is done server-side in UserService)
                       final index = _currentCardIndex;
                       if (index < 0 || index >= profiles.length) return;
                       final target = profiles[index];
                       final res = await _userService.updateSwipe(
-                        currentUid: currentUid,
+                        currentUid: uid,
                         targetUid: target.uid,
                         liked: true,
                         superLike: true,
                       );
                       if (res['success'] == true) {
+                        setState(() {
+                          _lastSwipedUserId =
+                              target.uid; // Track super like as last swipe
+                        });
                         // force swipe right visually
                         _swiperController.swipe(CardSwiperDirection.right);
                         if (res['isMatch'] == true) {
@@ -379,23 +432,43 @@ if (userData.isPremium && filterPrefs != null) {
                         ).showSnackBar(SnackBar(content: Text(msg)));
                       }
                     } else {
-                      // Undo for free user - check / consume
-                      final uid = FirebaseAuth.instance.currentUser!.uid;
-                      final allowed = await _userService.consumeUndo(
-                        uid,
-                        maxFreeUndos: _maxFreeUndos,
-                      );
-                      if (!allowed) {
+                      // Undo flow (Free or Premium/Exhausted Super Like)
+                      if (_lastSwipedUserId == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text(
-                              "No undos left today. Upgrade to Premium for more.",
-                            ),
+                            content: Text("No swipe recorded to undo."),
                           ),
                         );
                         return;
                       }
-                      _swiperController.undo();
+
+                      // Determine the max undo limit to send to the service layer (Rule 3)
+                      final maxAllowedUndos =
+                          isPremiumLocal &&
+                              superLikesUsed >= _maxPremiumSuperLikes
+                          ? _maxPremiumUndos // 10 undos if super likes exhausted
+                          : _maxFreeUndos; // 1 undo for free users
+
+                      final res = await _userService.revertLastSwipe(
+                        uid,
+                        maxFreeUndos: maxAllowedUndos,
+                      );
+
+                      if (res['success'] == true) {
+                        setState(() {
+                          _lastSwipedUserId =
+                              null; // Clear tracking after success
+                        });
+                        _swiperController.undo();
+                        // Reload profiles to re-fetch the undone profile
+                        _loadProfiles();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(res['message'] ?? "Undo failed."),
+                          ),
+                        );
+                      }
                     }
                   });
                 },

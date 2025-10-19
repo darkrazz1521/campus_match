@@ -10,6 +10,9 @@ class UserService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final int maxSuperLikes = 10; // NEW: Premium Super Like limit (Rule 2)
+  final int maxPremiumUndos =
+      10; // NEW: Undo limit after super likes exhausted (Rule 3)
 
   /// 🔹 Get current logged-in UID
   Future<String> getCurrentUid() async {
@@ -44,7 +47,10 @@ class UserService {
       isPremium: isPremium,
     );
 
-    await _firestore.collection('users').doc(uid).set(user.toJson(), SetOptions(merge: true));
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .set(user.toJson(), SetOptions(merge: true));
   }
 
   /// 🔹 Fetch a single user by UID
@@ -86,7 +92,10 @@ class UserService {
       },
     };
 
-    await _firestore.collection('users').doc(uid).set(data, SetOptions(merge: true));
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .set(data, SetOptions(merge: true));
   }
 
   /// 🔹 Get premium filter preferences
@@ -103,22 +112,14 @@ class UserService {
   void _maybeResetDailyCounters(UserModel user, DocumentReference userRef) {
     final now = DateTime.now();
     if (user.lastSwipeDate == null || !isSameDay(now, user.lastSwipeDate!)) {
-      userRef.update({
-        'dailySwipeCount': 0,
-        'lastSwipeDate': now,
-      });
+      userRef.update({'dailySwipeCount': 0, 'lastSwipeDate': now});
     }
     if (user.lastUndoDate == null || !isSameDay(now, user.lastUndoDate!)) {
-      userRef.update({
-        'undosUsedToday': 0,
-        'lastUndoDate': now,
-      });
+      userRef.update({'undosUsedToday': 0, 'lastUndoDate': now});
     }
-    if (user.lastSuperLikeDate == null || !isSameDay(now, user.lastSuperLikeDate!)) {
-      userRef.update({
-        'superLikesUsedToday': 0,
-        'lastSuperLikeDate': now,
-      });
+    if (user.lastSuperLikeDate == null ||
+        !isSameDay(now, user.lastSuperLikeDate!)) {
+      userRef.update({'superLikesUsedToday': 0, 'lastSuperLikeDate': now});
     }
   }
 
@@ -147,7 +148,11 @@ class UserService {
       const int swipeLimit = 50;
 
       if (currentCount >= swipeLimit) {
-        return {'success': false, 'isMatch': false, 'message': 'Daily swipe limit reached.'};
+        return {
+          'success': false,
+          'isMatch': false,
+          'message': 'Daily swipe limit reached.',
+        };
       }
 
       await userRef.update({
@@ -158,25 +163,53 @@ class UserService {
 
     // 🔸 Handle super-like limit
     if (superLike && !currentUser.isPremium) {
-      return {'success': false, 'isMatch': false, 'message': 'Super Like is a premium feature.'};
+      return {
+        'success': false,
+        'isMatch': false,
+        'message': 'Super Like is a premium feature.',
+      };
     }
 
     // 🔸 Update Firestore
+    // 🔸 Handle super-like validation and limit (Rule 2)
     if (superLike) {
+      if (!currentUser.isPremium) {
+        return {
+          'success': false,
+          'isMatch': false,
+          'message': 'Super Like is a premium feature.',
+        };
+      }
+
       final now = DateTime.now();
-      int currentSuperCount = (currentUser.lastSuperLikeDate == null ||
+      int currentSuperCount =
+          (currentUser.lastSuperLikeDate == null ||
               !isSameDay(now, currentUser.lastSuperLikeDate!))
           ? 0
           : currentUser.superLikesUsedToday;
+
+      // Enforce Super Like limit
+      if (currentSuperCount >= maxSuperLikes) {
+        return {
+          'success': false,
+          'isMatch': false,
+          'message':
+              'Daily Super Like limit reached (Max $maxSuperLikes). You can now use your free Undos.',
+        };
+      }
 
       await userRef.update({
         'superLikesUsedToday': currentSuperCount + 1,
         'lastSuperLikeDate': now,
         'superLikedUsers': FieldValue.arrayUnion([targetUid]),
+        'lastSwipedUserId': targetUid, // 🆕 Track last swipe
       });
     } else {
       await userRef.update({
-        liked ? 'likedUsers' : 'passedUsers': FieldValue.arrayUnion([targetUid]),
+        liked ? 'likedUsers' : 'passedUsers': FieldValue.arrayUnion([
+          targetUid,
+        ]),
+        'lastSwipedUserId': targetUid, // 🆕 Track last swipe
       });
     }
 
@@ -187,15 +220,118 @@ class UserService {
     if (targetDoc.exists) {
       final targetUser = UserModel.fromJson(targetDoc.data()!);
       final targetLikedCurrent =
-          targetUser.likedUsers.contains(currentUid) || targetUser.superLikedUsers.contains(currentUid);
+          targetUser.likedUsers.contains(currentUid) ||
+          targetUser.superLikedUsers.contains(currentUid);
+          print('CURRENT UID: $currentUid');
+print('TARGET UID: $targetUid');
+print('TARGET liked list: ${targetUser.likedUsers}');
+print('TARGET superliked list: ${targetUser.superLikedUsers}');
+print('LIKED = $liked, SUPERLIKE = $superLike');
 
-      if ((liked && targetLikedCurrent) || (superLike && targetUser.likedUsers.contains(currentUid))) {
-        await addMatch(currentUid, targetUid);
-        isMatch = true;
+
+      if ((liked && targetLikedCurrent) ||
+          (superLike && targetUser.likedUsers.contains(currentUid))) {
+        // Match Found! Execute atomic match update (This replaces addMatch call)
+        try {
+          final matchBatch = _firestore.batch();
+
+          // 1. Update Current User's matches
+          matchBatch.update(userRef, {
+            'matches': FieldValue.arrayUnion([targetUid]),
+          });
+
+          // 2. Update Target User's matches
+          matchBatch.update(targetRef, {
+            'matches': FieldValue.arrayUnion([currentUid]),
+          });
+
+          await matchBatch.commit();
+          isMatch = true;
+        } catch (e) {
+          // Log the failure to debug why the match wasn't recorded
+          print("MATCH CREATION FAILED: $e");
+          isMatch = false;
+        }
       }
     }
 
     return {'success': true, 'isMatch': isMatch};
+  }
+
+  /// 🔹 Revert the last recorded swipe action
+  Future<Map<String, dynamic>> revertLastSwipe(
+    String currentUid, {
+    int maxFreeUndos = 1,
+  }) async {
+    final ref = _firestore.collection('users').doc(currentUid);
+    final doc = await ref.get();
+    if (!doc.exists) return {'success': false, 'message': 'User not found'};
+
+    // We fetch the current user data to perform the rollback logic
+    final currentUser = UserModel.fromJson(doc.data()!);
+    final targetUid = currentUser.lastSwipedUserId;
+
+    if (targetUid == null) {
+      return {'success': false, 'message': 'No recent swipe to undo.'};
+    }
+
+    // 1. Consume undo count - utilizes the existing consumption logic
+    // Note: For premium users, consumeUndo always returns true
+    final undoAllowed = await consumeUndo(
+      currentUid,
+      maxFreeUndos: maxFreeUndos,
+    );
+
+    if (!undoAllowed) {
+      return {'success': false, 'message': 'Daily undo limit reached.'};
+    }
+
+    // 2. Determine which list to revert the swipe from
+    bool wasSuperLike = currentUser.superLikedUsers.contains(targetUid);
+    bool wasLike = currentUser.likedUsers.contains(targetUid);
+    bool wasPassed = currentUser.passedUsers.contains(targetUid);
+
+    if (!wasSuperLike && !wasLike && !wasPassed) {
+      await ref.update({'lastSwipedUserId': FieldValue.delete()});
+      return {'success': true, 'message': 'Undo successful (no swipe needed).'};
+    }
+    final batch = _firestore.batch();
+    final targetRef = _firestore.collection('users').doc(targetUid);
+
+    // 3. Revert the swipe for the current user
+    final String fieldToRemove = wasSuperLike
+        ? 'superLikedUsers'
+        : wasLike
+        ? 'likedUsers'
+        : 'passedUsers';
+
+    Map<String, dynamic> updateData = {
+      fieldToRemove: FieldValue.arrayRemove([targetUid]),
+      // Clear the last swipe ID to prevent double undo
+      'lastSwipedUserId': FieldValue.delete(),
+    };
+
+    // Decrement daily swipe counter if it was a free user's standard swipe
+    if (!currentUser.isPremium && !wasSuperLike) {
+      // FIX: Correctly assign FieldValue.increment to the map key 'dailySwipeCount'
+      updateData['dailySwipeCount'] = FieldValue.increment(-1);
+    }
+
+    batch.update(ref, updateData);
+
+    // 4. Check if the reversed swipe was a match, and remove the match entry
+    if (currentUser.matches.contains(targetUid)) {
+      // Remove match from both users
+      batch.update(ref, {
+        'matches': FieldValue.arrayRemove([targetUid]),
+      });
+      batch.update(targetRef, {
+        'matches': FieldValue.arrayRemove([currentUid]),
+      });
+    }
+
+    await batch.commit();
+    return {'success': true, 'message': 'Swipe undone successfully.'};
   }
 
   /// 🔹 Consume undo (free users limited)
@@ -206,29 +342,25 @@ class UserService {
 
     final user = UserModel.fromJson(doc.data()!);
     final now = DateTime.now();
-    int used = (user.lastUndoDate == null || !isSameDay(now, user.lastUndoDate!))
+    int used =
+        (user.lastUndoDate == null || !isSameDay(now, user.lastUndoDate!))
         ? 0
         : user.undosUsedToday;
 
-    if (!user.isPremium && used >= maxFreeUndos) return false;
+    // Determine max allowed undos based on the limit passed from UI (Rule 3)
+    int maxAllowedUndos = maxFreeUndos;
 
-    await ref.update({
-      'undosUsedToday': used + 1,
-      'lastUndoDate': now,
-    });
+    if (user.isPremium && maxFreeUndos > 1) {
+      // If premium and the UI passed a higher limit (10), enforce that limit.
+      maxAllowedUndos = maxPremiumUndos;
+    }
+
+    if (used >= maxAllowedUndos) return false;
+
+    await ref.update({'undosUsedToday': used + 1, 'lastUndoDate': now});
     return true;
   }
 
-  /// 🔹 Add mutual match between two users
-  Future<void> addMatch(String userA, String userB) async {
-    final batch = _firestore.batch();
-    final userARef = _firestore.collection('users').doc(userA);
-    final userBRef = _firestore.collection('users').doc(userB);
-
-    batch.update(userARef, {'matches': FieldValue.arrayUnion([userB])});
-    batch.update(userBRef, {'matches': FieldValue.arrayUnion([userA])});
-    await batch.commit();
-  }
 
   /// 🔹 Helper: Check if two DateTimes are same day
   static bool isSameDay(DateTime a, DateTime b) {

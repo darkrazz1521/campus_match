@@ -43,7 +43,8 @@ dependencies:
   http: ^1.2.2
   image_picker: ^1.0.8
   uuid: ^4.3.3
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
+  confetti: ^0.8.0
 
 
 
@@ -84,6 +85,7 @@ flutter:
     - assets/
     - assets/logo.png
     - assets/animations/login_animation.json
+    - assets/animations/love.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

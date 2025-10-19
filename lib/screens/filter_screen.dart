@@ -101,7 +101,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
 
                   _buildSectionTitle("Branch"),
                   DropdownButtonFormField<String>(
-                    value: selectedBranch,
+                    initialValue: selectedBranch,
                     decoration: _dropdownDecoration(),
                     hint: const Text("Select your branch"),
                     items: branches
@@ -114,7 +114,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
 
                   _buildSectionTitle("Year"),
                   DropdownButtonFormField<String>(
-                    value: selectedYear,
+                    initialValue: selectedYear,
                     decoration: _dropdownDecoration(),
                     hint: const Text("Select your year"),
                     items: years
