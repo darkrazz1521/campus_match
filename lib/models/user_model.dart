@@ -11,11 +11,7 @@ class UserModel {
   final List<String> interests;
   final String branch;
 
-  // Matching & swiping data
-  final List<String> likedUsers;
-  final List<String> passedUsers;
-  final List<String> matches;
-  final List<String> superLikedUsers;
+  
 
   // Premium & limits
   final bool isPremium;
@@ -43,10 +39,6 @@ class UserModel {
     required this.photos,
     required this.interests,
     required this.branch,
-    this.likedUsers = const [],
-    this.passedUsers = const [],
-    this.matches = const [],
-    this.superLikedUsers = const [],
     this.isPremium = false,
     this.dailySwipeCount = 0,
     this.lastSwipeDate,
@@ -70,10 +62,6 @@ class UserModel {
       photos: List<String>.from(json['photos'] ?? []),
       interests: List<String>.from(json['interests'] ?? []),
       branch: json['branch'] ?? '',
-      likedUsers: List<String>.from(json['likedUsers'] ?? []),
-      passedUsers: List<String>.from(json['passedUsers'] ?? []),
-      matches: List<String>.from(json['matches'] ?? []),
-      superLikedUsers: List<String>.from(json['superLikedUsers'] ?? []),
       matchScore: (json['matchScore'] ?? 0).toDouble(),
       distance: json['distance'] ?? 'Unknown',
       isPremium: json['isPremium'] ?? false,
@@ -118,10 +106,6 @@ class UserModel {
       'photos': photos,
       'interests': interests,
       'branch': branch,
-      'likedUsers': likedUsers,
-      'passedUsers': passedUsers,
-      'matches': matches,
-      'superLikedUsers': superLikedUsers,
       'matchScore': matchScore,
       'distance': distance,
       'isPremium': isPremium,
@@ -170,10 +154,6 @@ class UserModel {
       photos: photos ?? this.photos,
       interests: interests ?? this.interests,
       branch: branch ?? this.branch,
-      likedUsers: likedUsers ?? this.likedUsers,
-      passedUsers: passedUsers ?? this.passedUsers,
-      matches: matches ?? this.matches,
-      superLikedUsers: superLikedUsers ?? this.superLikedUsers,
       isPremium: isPremium ?? this.isPremium,
       dailySwipeCount: dailySwipeCount ?? this.dailySwipeCount,
       lastSwipeDate: lastSwipeDate ?? this.lastSwipeDate,

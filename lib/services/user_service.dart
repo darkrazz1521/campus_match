@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 
 class UserService {
   static final UserService _instance = UserService._internal();
@@ -13,6 +16,23 @@ class UserService {
   final int maxSuperLikes = 10; // NEW: Premium Super Like limit (Rule 2)
   final int maxPremiumUndos =
       10; // NEW: Undo limit after super likes exhausted (Rule 3)
+  CollectionReference get likesCollection => _firestore.collection('likes');
+  final String _serverUrl = "https://campus-function.onrender.com";
+
+      Map<String, dynamic> _createSwipeData({
+required String sourceUid,
+required String targetUid,
+required bool liked,
+bool superLike = false,
+}) {
+return {
+'sourceUid': sourceUid,
+'targetUid': targetUid,
+'liked': liked,
+'superLike': superLike,
+'timestamp': FieldValue.serverTimestamp(),
+};
+}
 
   /// 🔹 Get current logged-in UID
   Future<String> getCurrentUid() async {
@@ -123,247 +143,301 @@ class UserService {
     }
   }
 
-  /// 🔹 Handle swipes (like/pass/super-like)
-  Future<Map<String, dynamic>> updateSwipe({
-    required String currentUid,
-    required String targetUid,
-    required bool liked,
-    bool superLike = false,
-  }) async {
-    final userRef = _firestore.collection('users').doc(currentUid);
-    final userDoc = await userRef.get();
-    if (!userDoc.exists) return {'success': false, 'isMatch': false};
+  // Function to call your Render server
+Future<bool> _triggerMatchCheck(String sourceUid, String targetUid) async {
+  print("Calling server to check match: $sourceUid -> $targetUid");
+  try {
+    final response = await http.post(
+      Uri.parse("$_serverUrl/checkMatch"), // Endpoint name from Render server code
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'sourceUid': sourceUid,
+        'targetUid': targetUid,
+      }),
+    ).timeout(const Duration(seconds: 20)); // Add a timeout
 
-    final currentUser = UserModel.fromJson(userDoc.data()!);
+    print("Server response status: ${response.statusCode}");
+    print("Server response body: ${response.body}");
 
-    _maybeResetDailyCounters(currentUser, userRef);
-
-    // 🔸 Handle swipe limit for free users
-    if (!currentUser.isPremium) {
-      final now = DateTime.now();
-      final lastSwipe = currentUser.lastSwipeDate;
-      int currentCount = (lastSwipe == null || !isSameDay(now, lastSwipe))
-          ? 0
-          : currentUser.dailySwipeCount;
-      const int swipeLimit = 50;
-
-      if (currentCount >= swipeLimit) {
-        return {
-          'success': false,
-          'isMatch': false,
-          'message': 'Daily swipe limit reached.',
-        };
-      }
-
-      await userRef.update({
-        'dailySwipeCount': currentCount + 1,
-        'lastSwipeDate': now,
-      });
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = json.decode(response.body);
+      // Return the 'isMatch' value from the server
+      return data['isMatch'] as bool? ?? false; // Safely handle potential null
+    } else {
+      // Server error or unexpected response
+      print("Match check request failed with status: ${response.statusCode}");
+      return false;
     }
+  } catch (e) {
+    print("Failed to trigger match check (network error or timeout): $e");
+    return false;
+  }
+}
 
-    // 🔸 Handle super-like limit
-    if (superLike && !currentUser.isPremium) {
+Future<Map<String, dynamic>> updateSwipe({
+  required String currentUid,
+  required String targetUid,
+  required bool liked,
+  bool superLike = false,
+}) async {
+  final userRef = _firestore.collection('users').doc(currentUid);
+  DocumentSnapshot userDocSnapshot; // Declare here
+  try {
+     userDocSnapshot = await userRef.get(); // Assign here
+     if (!userDocSnapshot.exists) {
+       print("User document $currentUid not found.");
+       return {'success': false, 'isMatch': false, 'message': 'User not found.'};
+     }
+  } catch (e) {
+      print("Error fetching user document $currentUid: $e");
+      return {'success': false, 'isMatch': false, 'message': 'Failed to fetch user data.'};
+  }
+
+  // Ensure data exists before creating UserModel
+  final userData = userDocSnapshot.data() as Map<String, dynamic>?;
+  if (userData == null) {
+      print("User data for $currentUid is null.");
+      return {'success': false, 'isMatch': false, 'message': 'User data corrupted.'};
+  }
+  final currentUser = UserModel.fromJson(userData);
+
+
+  _maybeResetDailyCounters(currentUser, userRef);
+
+  // 🔸 Handle swipe limit for free users
+  if (!currentUser.isPremium) {
+    final now = DateTime.now();
+    // Fetch the latest count *after* potential reset
+    final latestUserDoc = await userRef.get();
+    final latestUserData = latestUserDoc.data() as Map<String, dynamic>? ?? {};
+    final lastSwipe = (latestUserData['lastSwipeDate'] as Timestamp?)?.toDate();
+    int currentCount = (lastSwipe == null || !isSameDay(now, lastSwipe))
+        ? 0
+        : (latestUserData['dailySwipeCount'] as int? ?? 0); // Safely get count
+
+    const int swipeLimit = 50; // Set your swipe limit
+
+    if (currentCount >= swipeLimit) {
+      print("User $currentUid reached daily swipe limit.");
       return {
-        'success': false,
+        'success': false, // Indicate failure to swipe
         'isMatch': false,
-        'message': 'Super Like is a premium feature.',
+        'message': 'Daily swipe limit reached.',
       };
     }
 
-    // 🔸 Update Firestore
-    // 🔸 Handle super-like validation and limit (Rule 2)
-    if (superLike) {
-      if (!currentUser.isPremium) {
-        return {
-          'success': false,
-          'isMatch': false,
-          'message': 'Super Like is a premium feature.',
-        };
-      }
-
-      final now = DateTime.now();
-      int currentSuperCount =
-          (currentUser.lastSuperLikeDate == null ||
-              !isSameDay(now, currentUser.lastSuperLikeDate!))
-          ? 0
-          : currentUser.superLikesUsedToday;
-
-      // Enforce Super Like limit
-      if (currentSuperCount >= maxSuperLikes) {
-        return {
-          'success': false,
-          'isMatch': false,
-          'message':
-              'Daily Super Like limit reached (Max $maxSuperLikes). You can now use your free Undos.',
-        };
-      }
-
-      await userRef.update({
-        'superLikesUsedToday': currentSuperCount + 1,
-        'lastSuperLikeDate': now,
-        'superLikedUsers': FieldValue.arrayUnion([targetUid]),
-        'lastSwipedUserId': targetUid, // 🆕 Track last swipe
-      });
-    } else {
-      await userRef.update({
-        liked ? 'likedUsers' : 'passedUsers': FieldValue.arrayUnion([
-          targetUid,
-        ]),
-        'lastSwipedUserId': targetUid, // 🆕 Track last swipe
-      });
+    // Increment swipe count atomically
+    try {
+        await userRef.update({
+            'dailySwipeCount': FieldValue.increment(1),
+            'lastSwipeDate': FieldValue.serverTimestamp(), // Use server time
+        });
+    } catch (e) {
+        print("Error updating swipe count for $currentUid: $e");
+        // Decide if you want to proceed or return error
+        return {'success': false, 'isMatch': false, 'message': 'Failed to update swipe count.'};
     }
-
-    // 🔸 Check for match
-    final targetRef = _firestore.collection('users').doc(targetUid);
-    final targetDoc = await targetRef.get();
-    bool isMatch = false;
-    if (targetDoc.exists) {
-      final targetUser = UserModel.fromJson(targetDoc.data()!);
-      final targetLikedCurrent =
-          targetUser.likedUsers.contains(currentUid) ||
-          targetUser.superLikedUsers.contains(currentUid);
-          print('CURRENT UID: $currentUid');
-print('TARGET UID: $targetUid');
-print('TARGET liked list: ${targetUser.likedUsers}');
-print('TARGET superliked list: ${targetUser.superLikedUsers}');
-print('LIKED = $liked, SUPERLIKE = $superLike');
-
-
-      if ((liked && targetLikedCurrent) ||
-          (superLike && targetUser.likedUsers.contains(currentUid))) {
-        // Match Found! Execute atomic match update (This replaces addMatch call)
-        try {
-          final matchBatch = _firestore.batch();
-
-          // 1. Update Current User's matches
-          matchBatch.update(userRef, {
-            'matches': FieldValue.arrayUnion([targetUid]),
-          });
-
-          // 2. Update Target User's matches
-          matchBatch.update(targetRef, {
-            'matches': FieldValue.arrayUnion([currentUid]),
-          });
-
-          await matchBatch.commit();
-          isMatch = true;
-        } catch (e) {
-          // Log the failure to debug why the match wasn't recorded
-          print("MATCH CREATION FAILED: $e");
-          isMatch = false;
-        }
-      }
-    }
-
-    return {'success': true, 'isMatch': isMatch};
   }
+
+  // 🔸 Handle super-like validation and limit (Rule 2)
+  if (superLike) {
+    if (!currentUser.isPremium) {
+       print("Attempted Super Like by non-premium user $currentUid.");
+       return {
+         'success': false,
+         'isMatch': false,
+         'message': 'Super Like is a premium feature.',
+       };
+    }
+
+    final now = DateTime.now();
+    // Fetch latest count
+    final latestUserDoc = await userRef.get();
+    final latestUserData = latestUserDoc.data() as Map<String, dynamic>? ?? {};
+    final lastSuperLike = (latestUserData['lastSuperLikeDate'] as Timestamp?)?.toDate();
+    int currentSuperCount = (lastSuperLike == null || !isSameDay(now, lastSuperLike))
+        ? 0
+        : (latestUserData['superLikesUsedToday'] as int? ?? 0);
+
+    // Enforce Super Like limit
+    if (currentSuperCount >= maxSuperLikes) {
+       print("User $currentUid reached Super Like limit.");
+       return {
+         'success': false,
+         'isMatch': false,
+         'message': 'Daily Super Like limit reached (Max $maxSuperLikes).',
+       };
+    }
+    try {
+        await userRef.update({
+            'superLikesUsedToday': FieldValue.increment(1),
+            'lastSuperLikeDate': FieldValue.serverTimestamp(),
+        });
+    } catch (e) {
+         print("Error updating super like count for $currentUid: $e");
+         return {'success': false, 'isMatch': false, 'message': 'Failed to update super like count.'};
+    }
+  }
+
+  // 🔸 WRITE SWIPE DATA TO 'LIKES' COLLECTION
+  String? newSwipeDocId;
+  try {
+    final newSwipeRef = await likesCollection.add(
+      _createSwipeData(
+        sourceUid: currentUid,
+        targetUid: targetUid,
+        liked: liked,
+        superLike: superLike,
+      ),
+    );
+    newSwipeDocId = newSwipeRef.id; // Store the ID
+
+    // Update lastSwipedUserId for undo functionality
+    await userRef.update({
+      'lastSwipedUserId': newSwipeDocId,
+    });
+     print("Swipe recorded successfully for $currentUid -> $targetUid (Doc ID: $newSwipeDocId)");
+  } catch (e) {
+    print("❌ FAILED TO RECORD SWIPE IN LIKES COLLECTION for $currentUid -> $targetUid: $e");
+    // Attempt to roll back swipe count if needed (optional, complex)
+    // if (!currentUser.isPremium) { ... decrement dailySwipeCount ... }
+    // if (superLike) { ... decrement superLikesUsedToday ... }
+    return {
+      'success': false,
+      'isMatch': false,
+      'message': 'Failed to record swipe.',
+    };
+  }
+
+  // 🔸 CHECK FOR MUTUAL MATCH (CALL RENDER SERVER)
+  bool isMatch = false; // Default to no match
+  if (liked) { // Only check for match if it was a 'like' or 'superLike'
+    print("Swipe was a like/superlike, triggering match check...");
+    // We now AWAIT the result from our Render server
+    isMatch = await _triggerMatchCheck(currentUid, targetUid);
+    print("Match check result for $currentUid -> $targetUid: isMatch = $isMatch");
+  } else {
+      print("Swipe was not a like, skipping match check.");
+  }
+
+  // Return success and the result from the server
+  return {'success': true, 'isMatch': isMatch};
+}
 
   /// 🔹 Revert the last recorded swipe action
-  Future<Map<String, dynamic>> revertLastSwipe(
-    String currentUid, {
-    int maxFreeUndos = 1,
-  }) async {
-    final ref = _firestore.collection('users').doc(currentUid);
-    final doc = await ref.get();
-    if (!doc.exists) return {'success': false, 'message': 'User not found'};
+/// 🔹 Revert the last recorded swipe action
+Future<Map<String, dynamic>> revertLastSwipe(
+String currentUid, {
+int maxFreeUndos = 1,
+}) async {
+final ref = _firestore.collection('users').doc(currentUid);
+final doc = await ref.get();
+if (!doc.exists) return {'success': false, 'message': 'User not found'};
 
-    // We fetch the current user data to perform the rollback logic
-    final currentUser = UserModel.fromJson(doc.data()!);
-    final targetUid = currentUser.lastSwipedUserId;
+final currentUser = UserModel.fromJson(doc.data()!);
+// The lastSwipedUserId now holds the document ID of the swipe in the 'likes' collection.
+final swipeDocId = currentUser.lastSwipedUserId;
 
-    if (targetUid == null) {
-      return {'success': false, 'message': 'No recent swipe to undo.'};
-    }
+if (swipeDocId == null) {
+return {'success': false, 'message': 'No recent swipe to undo.'};
+}
 
-    // 1. Consume undo count - utilizes the existing consumption logic
-    // Note: For premium users, consumeUndo always returns true
-    final undoAllowed = await consumeUndo(
-      currentUid,
-      maxFreeUndos: maxFreeUndos,
-    );
+// Fetch the swipe data to identify the target user and swipe type
+final swipeDoc = await likesCollection.doc(swipeDocId).get();
+if (!swipeDoc.exists) {
+await ref.update({'lastSwipedUserId': FieldValue.delete()});
+return {'success': false, 'message': 'Original swipe record not found.'};
+}
 
-    if (!undoAllowed) {
-      return {'success': false, 'message': 'Daily undo limit reached.'};
-    }
+// Explicitly cast data to access fields safely
+final swipeData = swipeDoc.data() as Map<String, dynamic>?;
+if (swipeData == null) {
+ await ref.update({'lastSwipedUserId': FieldValue.delete()});
+ return {'success': false, 'message': 'Original swipe data is empty.'};
+}
+final targetUid = swipeData['targetUid'] as String?;
+final bool wasSuperLike = swipeData['superLike']?? false;
+final bool wasLiked = swipeData['liked']?? false;
 
-    // 2. Determine which list to revert the swipe from
-    bool wasSuperLike = currentUser.superLikedUsers.contains(targetUid);
-    bool wasLike = currentUser.likedUsers.contains(targetUid);
-    bool wasPassed = currentUser.passedUsers.contains(targetUid);
+if (targetUid == null) {
+return {'success': false, 'message': 'Swipe data corrupted (Target UID missing).'};
+}
 
-    if (!wasSuperLike && !wasLike && !wasPassed) {
-      await ref.update({'lastSwipedUserId': FieldValue.delete()});
-      return {'success': true, 'message': 'Undo successful (no swipe needed).'};
-    }
-    final batch = _firestore.batch();
-    final targetRef = _firestore.collection('users').doc(targetUid);
+// 1. Consume undo count
+final undoAllowed = await consumeUndo(
+currentUid,
+maxFreeUndos: maxFreeUndos,
+);
 
-    // 3. Revert the swipe for the current user
-    final String fieldToRemove = wasSuperLike
-        ? 'superLikedUsers'
-        : wasLike
-        ? 'likedUsers'
-        : 'passedUsers';
+if (!undoAllowed) {
+return {'success': false, 'message': 'Daily undo limit reached.'};
+}
 
-    Map<String, dynamic> updateData = {
-      fieldToRemove: FieldValue.arrayRemove([targetUid]),
-      // Clear the last swipe ID to prevent double undo
-      'lastSwipedUserId': FieldValue.delete(),
-    };
+final batch = _firestore.batch();
+final targetRef = _firestore.collection('users').doc(targetUid);
 
-    // Decrement daily swipe counter if it was a free user's standard swipe
-    if (!currentUser.isPremium && !wasSuperLike) {
-      // FIX: Correctly assign FieldValue.increment to the map key 'dailySwipeCount'
-      updateData['dailySwipeCount'] = FieldValue.increment(-1);
-    }
+// 2. DELETE THE SWIPE RECORD FROM THE LIKES COLLECTION
+batch.delete(likesCollection.doc(swipeDocId));
 
-    batch.update(ref, updateData);
+// 3. Update Current User's profile
+Map<String, dynamic> updateData = {
+'lastSwipedUserId': FieldValue.delete(),
+};
 
-    // 4. Check if the reversed swipe was a match, and remove the match entry
-    if (currentUser.matches.contains(targetUid)) {
-      // Remove match from both users
-      batch.update(ref, {
-        'matches': FieldValue.arrayRemove([targetUid]),
-      });
-      batch.update(targetRef, {
-        'matches': FieldValue.arrayRemove([currentUid]),
-      });
-    }
+// Decrement daily swipe counter if it was a free user's standard swipe
+if (!currentUser.isPremium &&!wasSuperLike && wasLiked) {
+// FIX: Assign FieldValue.increment to the correct key in the map
+updateData['dailySwipeCount'] = FieldValue.increment(-1);
 
-    await batch.commit();
-    return {'success': true, 'message': 'Swipe undone successfully.'};
-  }
+}
 
-  /// 🔹 Consume undo (free users limited)
-  Future<bool> consumeUndo(String uid, {int maxFreeUndos = 1}) async {
-    final ref = _firestore.collection('users').doc(uid);
-    final doc = await ref.get();
-    if (!doc.exists) return false;
+batch.update(ref, updateData);
 
-    final user = UserModel.fromJson(doc.data()!);
-    final now = DateTime.now();
-    int used =
-        (user.lastUndoDate == null || !isSameDay(now, user.lastUndoDate!))
-        ? 0
-        : user.undosUsedToday;
+// 4. Check if the reversed swipe was a match, and remove the match entry
+// NOTE: This check still relies on the match being recorded in the user document.
+if (doc.data()?['matches']!= null && 
+(doc.data()!['matches'] as List).contains(targetUid)) {
+// Remove match from both users
+batch.update(ref, {
+'matches': FieldValue.arrayRemove([targetUid]),
+});
+batch.update(targetRef, {
+'matches': FieldValue.arrayRemove([currentUid]),
+});
+}
 
-    // Determine max allowed undos based on the limit passed from UI (Rule 3)
-    int maxAllowedUndos = maxFreeUndos;
+await batch.commit();
+return {'success': true, 'message': 'Swipe undone successfully.'};
+}
 
-    if (user.isPremium && maxFreeUndos > 1) {
-      // If premium and the UI passed a higher limit (10), enforce that limit.
-      maxAllowedUndos = maxPremiumUndos;
-    }
+Future<bool> consumeUndo(String uid, {int maxFreeUndos = 1}) async {
+final ref = _firestore.collection('users').doc(uid);
+final doc = await ref.get();
+if (!doc.exists) return false;
 
-    if (used >= maxAllowedUndos) return false;
+final user = UserModel.fromJson(doc.data()!);
+final now = DateTime.now();
+int used =
+(user.lastUndoDate == null ||!isSameDay(now, user.lastUndoDate!))
+? 0
+: user.undosUsedToday;
 
-    await ref.update({'undosUsedToday': used + 1, 'lastUndoDate': now});
-    return true;
-  }
+// Determine max allowed undos based on the limit passed from UI (Rule 3)
+int maxAllowedUndos = maxFreeUndos;
 
+if (user.isPremium && maxFreeUndos > 1) {
+// If premium and the UI passed a higher limit (10), enforce that limit.
+maxAllowedUndos = maxPremiumUndos;
+}
 
-  /// 🔹 Helper: Check if two DateTimes are same day
-  static bool isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
+if (used >= maxAllowedUndos) return false;
+
+await ref.update({'undosUsedToday': used + 1, 'lastUndoDate': now});
+return true;
+}
+
+static bool isSameDay(DateTime a, DateTime b) {
+return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
 }

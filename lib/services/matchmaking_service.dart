@@ -10,16 +10,7 @@ class MatchmakingService {
   final UserService _userService = UserService.instance;
 
   /// Fetch users that are not already swiped or matched
-  Future<List<UserModel>> fetchPotentialMatches(UserModel currentUser) async {
-    final allUsers = await _userService.getAllUsers(currentUser.uid);
-
-    return allUsers.where((user) {
-      final alreadySwiped = currentUser.likedUsers.contains(user.uid) ||
-          currentUser.passedUsers.contains(user.uid) ||
-          currentUser.matches.contains(user.uid);
-      return !alreadySwiped;
-    }).toList();
-  }
+  
 
   /// Calculate compatibility match score
   double calculateMatchScore(UserModel userA, UserModel userB, {bool isSuperLikedByA = false}) {
@@ -107,7 +98,7 @@ return (score / 100).clamp(0.0, 1.0);
 
     // 🎯 3. Compute match score + simulate distance
     final processed = filteredUsers.map((u) {
-      final isSuperLikedByCurrent = u.superLikedUsers.contains(currentUid);
+      final isSuperLikedByCurrent = false;
       final matchScore =
           calculateMatchScore(currentUser, u, isSuperLikedByA: isSuperLikedByCurrent);
 

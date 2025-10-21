@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -104,66 +106,150 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
 
           // 🔹 Notification list
-          Expanded(
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final notif = notifications[index];
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Avatar
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundImage: NetworkImage(notif["image"]!),
-                      ),
-                      const SizedBox(width: 12),
-                      // Name & message
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              notif["name"]!,
-                              style: GoogleFonts.beVietnamPro(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            Text(
-                              notif["message"]!,
-                              style: GoogleFonts.beVietnamPro(
-                                fontSize: 14,
-                                color: accentColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+          // -----------------------------------------------------------------
+// ✅ REPLACE IT WITH THIS NEW WIDGET
+// -----------------------------------------------------------------
+// Replace the original Expanded(...) that contained the static list
+Expanded(
+  child: StreamBuilder<QuerySnapshot>(
+    // 1. Query the 'notifications' collection for the current user
+    stream: FirebaseFirestore.instance
+        .collection('notifications')
+        .where('toUid',
+            isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '') // Handle null user briefly
+        .orderBy('timestamp', descending: true)
+        .snapshots(),
+    builder: (context, snapshot) {
+      // 2. Handle loading state
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return Center(child: CircularProgressIndicator(color: accentColor));
+      }
+      // Handle error state
+       if (snapshot.hasError) {
+         print("Error loading notifications: ${snapshot.error}");
+         return Center(
+           child: Text(
+             "Error loading notifications.",
+             style: GoogleFonts.beVietnamPro(color: Colors.red),
+           ),
+         );
+       }
+       // Handle no data state
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return Center(
+          child: Text(
+            "No notifications yet. Start swiping!",
+            style: GoogleFonts.beVietnamPro(color: Colors.grey[600]),
           ),
+        );
+      }
+
+
+      // 3. Get the list of notification documents
+      final docs = snapshot.data!.docs;
+
+      // 4. Use ListView.builder with the live data
+      return ListView.builder(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(top: 8, bottom: 8), // Add some padding
+        itemCount: docs.length,
+        itemBuilder: (context, index) {
+          // Get the data from the Firestore document
+          final data = docs[index].data() as Map<String, dynamic>?; // Make data nullable
+
+           // Safely access data with null checks and defaults
+           final String fromName = data?['fromName'] as String? ?? 'CampusMatch';
+           final String body = data?['body'] as String? ?? 'New notification!';
+           final String fromImage = data?['fromImage'] as String? ?? ''; // Default empty image URL
+           final String docId = docs[index].id; // Get document ID for potential actions
+           final bool isRead = data?['read'] as bool? ?? false; // Check read status
+
+
+          // Use your existing UI container - AnimatedContainer for item appearance
+          return InkWell( // Wrap with InkWell for tap interaction
+            onTap: () {
+              // Optional: Mark as read when tapped
+              if (!isRead) {
+                 FirebaseFirestore.instance.collection('notifications').doc(docId).update({'read': true});
+              }
+              // Optional: Navigate somewhere, e.g., to the chat with this user
+              // String? matchId = data?['matchId'] as String?;
+              // if (matchId != null) { /* Navigate to chat screen */ }
+              print("Tapped notification ID: $docId");
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              margin:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                // Slightly dim read notifications
+                color: isRead ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04), // Softer shadow
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // Avatar
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: Colors.pink.shade50, // Placeholder bg
+                    backgroundImage: (fromImage.isNotEmpty && Uri.tryParse(fromImage)?.hasAbsolutePath == true)
+                        ? NetworkImage(fromImage)
+                        : null,
+                    child: (fromImage.isEmpty || Uri.tryParse(fromImage)?.hasAbsolutePath != true)
+                        ? Icon(Icons.favorite, size: 28, color: accentColor.withOpacity(0.8)) // Default icon
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  // Name & message
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fromName, // Live data
+                          style: GoogleFonts.beVietnamPro(
+                            fontWeight: isRead ? FontWeight.w500 : FontWeight.w600, // Bold if unread
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                         const SizedBox(height: 2), // Small gap
+                        Text(
+                          body, // Live data
+                          maxLines: 2, // Allow wrapping
+                          overflow: TextOverflow.ellipsis, // Add ellipsis if too long
+                          style: GoogleFonts.beVietnamPro(
+                            fontSize: 14,
+                            color: isRead ? Colors.grey[600] : accentColor, // Different color if read
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                   // Optional: Unread indicator
+                   if (!isRead) ...[
+                       const SizedBox(width: 8),
+                       CircleAvatar(radius: 5, backgroundColor: Colors.pinkAccent),
+                   ]
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  ),
+),
 
           // 🔹 Bottom Navigation
           Container(

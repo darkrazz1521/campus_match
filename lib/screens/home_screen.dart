@@ -6,6 +6,9 @@ import 'confessions_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +22,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Color primaryColor = const Color(0xFFF04299);
   final Color accentColor = const Color(0xFF9A4C73);
+
+  @override
+  void initState() {
+    super.initState();
+    // Call the function as soon as HomeScreen loads
+    _saveFcmToken();
+  }
+
+  /// Saves the user's FCM token to Firestore
+  Future<void> _saveFcmToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return; // Not logged in
+
+    try {
+      // 1. Get the token
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        // 2. Save it to the user's document
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+          'fcmToken': token,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        print('FCM Token saved: $token');
+      }
+
+      // 3. Listen for token refreshes and save again
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        print('FCM Token refreshed: $newToken');
+        if (mounted) { // Check if the widget is still in the tree
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+            'fcmToken': newToken,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (e) {
+      print('Error saving FCM token: $e');
+    }
+  }
 
   final List<Widget> _pages = const [
     SwipingScreen(),

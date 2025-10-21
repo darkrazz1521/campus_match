@@ -42,6 +42,7 @@ class _SwipingScreenState extends State<SwipingScreen>
   final int _maxPremiumSuperLikes = 10; //  Max Super Likes for Premium users
   final int _maxPremiumUndos = 10; //  Max Undos after Super Likes are exhausted
   final bool _isMatchFound = false;
+  bool _isSwiping = false;
 
   @override
   void initState() {
@@ -305,49 +306,96 @@ class _SwipingScreenState extends State<SwipingScreen>
                   backCardOffset: const Offset(0, 25),
                   padding: const EdgeInsets.all(8),
                   onSwipe: (previousIndex, currentIndex, direction) async {
-                    _currentCardIndex = currentIndex ?? 0;
+  // Prevent swipe if already processing
+  if (_isSwiping) {
+    print("Swipe blocked: Already processing another swipe.");
+    return false; // Prevent card from moving
+  }
 
-                    if (!canSwipe) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "Daily swipe limit reached! Go Premium for unlimited swipes.",
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                      return false;
-                    }
+  // Validate index
+  if (previousIndex < 0 || previousIndex >= profiles.length) {
+     print("Swipe blocked: Invalid previousIndex $previousIndex");
+     return false;
+  }
 
-                    final swipedUser = profiles[previousIndex];
-                    final currentUid = FirebaseAuth.instance.currentUser!.uid;
+  _currentCardIndex = currentIndex ?? 0; // Update current index
 
-                    final res = await _userService.updateSwipe(
-                      currentUid: currentUid,
-                      targetUid: swipedUser.uid,
-                      liked: direction == CardSwiperDirection.right,
-                      superLike: false,
-                    );
+  if (!canSwipe) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Daily swipe limit reached! Go Premium for unlimited swipes.",
+        ),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    print("Swipe blocked: Daily limit reached.");
+    return false; // Prevent card from moving
+  }
 
-                    if (res['success'] == true) {
-                      setState(() {
-                        _lastSwipedUserId =
-                            swipedUser.uid; // 🆕 Track last successful swipe
-                      });
-                      // If a match occurred -> show animation
-                      if (res['isMatch'] == true) {
-                        _showMatchDialog(swipedUser);
-                      }
-                    }
+  // 1. SET LOADING STATE
+  print("Starting swipe processing...");
+  setState(() { _isSwiping = true; });
 
-                    // Reload profiles if close to limit
-                    if (!isPremium &&
-                        (profiles.length - (currentIndex ?? 0)) <= 5) {
-                      _loadProfiles();
-                    }
+  final swipedUser = profiles[previousIndex];
+  final currentUid = FirebaseAuth.instance.currentUser!.uid;
+  final bool liked = direction == CardSwiperDirection.right; // Check direction
 
-                    return res['success'] == true;
-                  },
+  Map<String, dynamic> res = {}; // Initialize result map
+
+  try {
+      // 2. AWAIT the result (includes server call if liked)
+      res = await _userService.updateSwipe(
+        currentUid: currentUid,
+        targetUid: swipedUser.uid,
+        liked: liked, // Pass the correct liked status
+        superLike: false, // Super Like is handled by its dedicated button
+      );
+      print("updateSwipe result: $res");
+
+  } catch (e) {
+      print("❌ Error during updateSwipe call: $e");
+      res = {'success': false, 'isMatch': false, 'message': 'An error occurred during swipe.'};
+  } finally {
+      // 3. UNSET LOADING STATE (always do this)
+      if (mounted) { // Check if the widget is still in the tree
+          setState(() { _isSwiping = false; });
+      }
+      print("Swipe processing finished.");
+  }
+
+  if (res['success'] == true) {
+      if (mounted) {
+          setState(() {
+            _lastSwipedUserId = swipedUser.uid; // Track last successful swipe
+          });
+      }
+
+      // 4. SHOW MATCH DIALOG if the server confirmed a match
+      if (res['isMatch'] == true && mounted) {
+          print("🎉 Match confirmed by server! Showing dialog.");
+         _showMatchDialog(swipedUser);
+      }
+
+      // Reload profiles logic (optional, keep if needed)
+      // if (!isPremium && (profiles.length - _currentCardIndex) <= 5) {
+      //   print("Low on profiles, reloading...");
+      //   _loadProfiles();
+      // }
+
+      return true; // Allow the card swipe animation to complete
+  } else {
+      // Show error message if swipe failed
+      final msg = res['message'] ?? "Swipe failed. Please try again.";
+       if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(content: Text(msg), backgroundColor: Colors.red),
+           );
+       }
+      print("Swipe failed: ${res['message']}");
+      return false; // Prevent the card swipe animation
+  }
+},
 
                   cardBuilder: (context, index, percentX, percentY) {
                     final profile = profiles[index];
@@ -369,15 +417,19 @@ class _SwipingScreenState extends State<SwipingScreen>
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _glowButton(
-                Icons.close,
-                Colors.redAccent,
-                () => _swiperController.swipe(CardSwiperDirection.left),
-              ),
-              _glowButton(
-                Icons.favorite,
-                primaryColor,
-                () => _swiperController.swipe(CardSwiperDirection.right),
-              ),
+ Icons.close,
+ Colors.redAccent,
+ (_isSwiping || profiles.isEmpty)
+? null
+: () => _swiperController.swipe(CardSwiperDirection.left),
+),
+ _glowButton(
+ Icons.favorite,
+ primaryColor,
+ (_isSwiping || profiles.isEmpty)
+? null
+ : () => _swiperController.swipe(CardSwiperDirection.right),
+ ),
 
               // Third button: undo for free / super-like for premium
               FutureBuilder<UserModel?>(
@@ -401,77 +453,85 @@ class _SwipingScreenState extends State<SwipingScreen>
                       ? Colors.blueAccent
                       : (isUndoAvailable ? Colors.amber : Colors.grey);
 
-                  return _glowButton(icon, color, () async {
-                    final uid = FirebaseAuth.instance.currentUser!.uid;
+                  final onPressed = (_isSwiping || profiles.isEmpty)
+? null
+ : () async {
+ // Set processing state for button action
+// setState(() => _isSwiping = true); 
+ final uid = FirebaseAuth.instance.currentUser!.uid;
+ 
+ try {
+ if (isSuperLikeMode) {
+ // Super like flow
+ final index = _currentCardIndex;
+ if (index < 0 || index >= profiles.length) return;
+ final target = profiles[index];
+ final res = await _userService.updateSwipe(
+ currentUid: uid,
+ targetUid: target.uid,
+ liked: true,
+ superLike: true,
+ );
+ if (res['success'] == true) {
+ setState(() {
+ _lastSwipedUserId = target.uid;
+ });
+ // force swipe right visually
+ _swiperController.swipe(CardSwiperDirection.right);
+ if (res['isMatch'] == true) {
+ _showMatchDialog(target);
+ }
+ } else {
+ final msg = res['message']?? 'Super Like failed';
+ ScaffoldMessenger.of(
+ context,
+ ).showSnackBar(SnackBar(content: Text(msg)));
+}
+ } else {
+// Undo flow 
+ if (_lastSwipedUserId == null) {
+ ScaffoldMessenger.of(context).showSnackBar(
+ const SnackBar(
+ content: Text("No swipe recorded to undo."),
+ ),
+ );
+ return;
+ }
 
-                    if (isSuperLikeMode) {
-                      // Super like flow (Rule 2 check is done server-side in UserService)
-                      final index = _currentCardIndex;
-                      if (index < 0 || index >= profiles.length) return;
-                      final target = profiles[index];
-                      final res = await _userService.updateSwipe(
-                        currentUid: uid,
-                        targetUid: target.uid,
-                        liked: true,
-                        superLike: true,
-                      );
-                      if (res['success'] == true) {
-                        setState(() {
-                          _lastSwipedUserId =
-                              target.uid; // Track super like as last swipe
-                        });
-                        // force swipe right visually
-                        _swiperController.swipe(CardSwiperDirection.right);
-                        if (res['isMatch'] == true) {
-                          _showMatchDialog(target);
-                        }
-                      } else {
-                        final msg = res['message'] ?? 'Super Like failed';
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text(msg)));
-                      }
-                    } else {
-                      // Undo flow (Free or Premium/Exhausted Super Like)
-                      if (_lastSwipedUserId == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("No swipe recorded to undo."),
-                          ),
-                        );
-                        return;
-                      }
+ // Determine the max undo limit to send to the service layer (Rule 3)
+ final maxAllowedUndos =
+ isPremiumLocal &&
+ superLikesUsed >= _maxPremiumSuperLikes
+? _maxPremiumUndos // 10 undos if super likes exhausted
+ : _maxFreeUndos; // 1 undo for free users
 
-                      // Determine the max undo limit to send to the service layer (Rule 3)
-                      final maxAllowedUndos =
-                          isPremiumLocal &&
-                              superLikesUsed >= _maxPremiumSuperLikes
-                          ? _maxPremiumUndos // 10 undos if super likes exhausted
-                          : _maxFreeUndos; // 1 undo for free users
+ final res = await _userService.revertLastSwipe(
+ uid,
+ maxFreeUndos: maxAllowedUndos,
+ );
 
-                      final res = await _userService.revertLastSwipe(
-                        uid,
-                        maxFreeUndos: maxAllowedUndos,
-                      );
-
-                      if (res['success'] == true) {
-                        setState(() {
-                          _lastSwipedUserId =
-                              null; // Clear tracking after success
-                        });
-                        _swiperController.undo();
-                        // Reload profiles to re-fetch the undone profile
-                        _loadProfiles();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(res['message'] ?? "Undo failed."),
-                          ),
-                        );
-                      }
-                    }
-                  });
-                },
+ if (res['success'] == true) {
+ setState(() {
+ _lastSwipedUserId = null; // Clear tracking after success
+ });
+ _swiperController.undo();
+ // Reload profiles to re-fetch the undone profile
+ _loadProfiles();
+ } else {
+ ScaffoldMessenger.of(context).showSnackBar(
+ SnackBar(
+ content: Text(res['message']?? "Undo failed."),
+ ),
+ );
+ }
+ }
+ } finally {
+ setState(() => _isSwiping = false); // Clear processing state
+ }
+ };
+ return _glowButton(icon, color, onPressed);
+ },
+                
               ),
             ],
           ),
@@ -742,32 +802,38 @@ class _SwipingScreenState extends State<SwipingScreen>
     }
   }
 
-  Widget _glowButton(IconData icon, Color color, VoidCallback onPressed) {
-    return GestureDetector(
-      onTapDown: (_) => HapticFeedback.mediumImpact(),
-      onTap: onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        transform: Matrix4.identity()..scale(1.0),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.45),
-              blurRadius: 20,
-              spreadRadius: 3,
-            ),
-          ],
-        ),
-        child: CircleAvatar(
-          radius: 34,
-          backgroundColor: Colors.white.withOpacity(0.95),
-          child: Icon(icon, size: 32, color: color),
-        ),
-      ),
-    );
-  }
+  Widget _glowButton(IconData icon, Color color, VoidCallback? onPressed) {
+ final bool isDisabled = onPressed == null;
+ final Color displayColor = isDisabled? Colors.grey.shade400 : color;
+ final double elevation = isDisabled? 0 : 20;
+
+ return GestureDetector(
+ // Only execute handlers if not disabled
+ onTapDown: isDisabled? null : (_) => HapticFeedback.mediumImpact(),
+ onTap: onPressed,
+ child: AnimatedContainer(
+ duration: const Duration(milliseconds: 150),
+ curve: Curves.easeOut,
+ transform: Matrix4.identity()..scale(1.0),
+ decoration: BoxDecoration(
+ shape: BoxShape.circle,
+ boxShadow: [
+          BoxShadow(
+            color: isDisabled ? Colors.transparent : displayColor.withOpacity(0.45), // Use displayColor
+            blurRadius: elevation,
+            spreadRadius: isDisabled ? 0 : 3,
+          ),
+        ],
+ ),
+ child: CircleAvatar(
+ radius: 34,
+ backgroundColor:
+ isDisabled? Colors.grey.shade200 : Colors.white.withOpacity(0.95),
+ child: Icon(icon, size: 32, color: displayColor),
+ ),
+ ),
+ );
+}
 
   Widget _buildEmptyState() {
     return Center(
