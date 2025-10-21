@@ -252,43 +252,11 @@ Expanded(
 ),
 
           // 🔹 Bottom Navigation
-          Container(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.grey.shade300)),
-              color: bgColor,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _navItem(Icons.home_filled, "Home", true),
-                _navItem(Icons.chat_bubble_outline, "Chat", false),
-                _navItem(Icons.people_outline, "Confessions", false),
-                _navItem(Icons.person_outline, "Profile", false),
-              ],
-            ),
-          ),
+          
         ],
       ),
     );
   }
 
-  Widget _navItem(IconData icon, String label, bool isActive) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon,
-            color: isActive ? Colors.black : accentColor.withOpacity(0.8)),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.beVietnamPro(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: isActive ? Colors.black : accentColor.withOpacity(0.8),
-          ),
-        ),
-      ],
-    );
-  }
+  
 }

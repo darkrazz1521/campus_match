@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/profile_widgets.dart';
 import '../services/profile_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
+import '../providers/swipe_provider.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -34,31 +37,50 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
   bool _isUploading = false;
+  bool _isDataLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadUserData(); // fetch user data
+    // Load data after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserData();
+    });
   }
 
   Future<void> _loadUserData() async {
-    final userData = await _profileService.getCurrentUserData();
+    if (_isDataLoaded) return;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final userData = userProvider.currentUser; // Get data from provider
     if (userData == null) return;
 
     setState(() {
-      nameController.text = userData['fullName'] ?? '';
-      collegeController.text = userData['gender'] ?? '';
-      majorController.text = userData['collegeYear'] ?? '';
-      dobController.text = userData['dob'] ?? '';
-      branchController.text = userData['branch'] ?? '';
-      bioController.text = userData['bio'] ?? '';
+      nameController.text = userData.name;
+      collegeController.text = userData.gender;
+      majorController.text = userData.collegeYear;
+      dobController.text = userData.dob;
+      branchController.text = userData.branch;
+      bioController.text = userData.bio;
 
       uploadedPhotos.clear();
-      uploadedPhotos.addAll(List<String>.from(userData['photos'] ?? []));
+      uploadedPhotos.addAll(userData.photos);
       selectedInterests.clear();
-      selectedInterests.addAll(List<String>.from(userData['interests'] ?? []));
+      selectedInterests.addAll(userData.interests);
+      
+      _isDataLoaded = true; // Mark as loaded
     });
+  
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If user data is available (e.g., after login), load it
+    final userProvider = Provider.of<UserProvider>(context);
+    if(userProvider.currentUser != null && !_isDataLoaded) {
+      _loadUserData();
+    }
   }
 
   void _onScroll() {
@@ -136,7 +158,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         dob.isEmpty ||
         branch.isEmpty) {
       _showError(
-        "Please fill all fields: Name, Gender, College Year, Branch, and DOB.",
+        "Please fill all fields...",
       );
       return;
     }
@@ -170,6 +192,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         branch: branch,
       );
 
+      if (!mounted) return;
+      // After saving, tell UserProvider to refresh its data
+      await Provider.of<UserProvider>(context, listen: false).refreshUser();
+      // Also tell SwipeProvider to reload profiles with new data
+      await Provider.of<SwipeProvider>(context, listen: false).loadProfiles();
+
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("🎉 Profile saved successfully!"),
@@ -194,6 +223,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     final double topInset = MediaQuery.of(context).padding.top;
+    if (!_isDataLoaded) {
+      // Re-trigger load just in case
+      _loadUserData(); 
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: primaryColor)),
+      );
+    }
     return Scaffold(
       backgroundColor: backgroundColor,
       floatingActionButton: _showScrollToTop

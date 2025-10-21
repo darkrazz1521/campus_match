@@ -3,8 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'auth/login_screen.dart';
 import 'filter_screen.dart';
-import '../models/user_model.dart';
-import '../services/user_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
+import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,7 +17,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen>
     with TickerProviderStateMixin {
   final Color accentColor = const Color(0xFF9A4C73);
-  final UserService _userService = UserService.instance;
 
   final Gradient bgGradient = const LinearGradient(
     begin: Alignment.topCenter,
@@ -234,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -273,6 +274,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                         icon: Icons.person_outline,
                         title: "Edit Profile",
                         subtitle: "Update your personal information",
+                        onTap: () {
+                           // Navigate directly to the profile setup screen
+                           Navigator.push(
+                             context,
+                             MaterialPageRoute(
+                               builder: (context) => const ProfileSetupScreen(),
+                             ),
+                           );
+                        }
                       ),
                       _buildListItem(
                         icon: Icons.settings_outlined,
@@ -299,11 +309,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                       ),
 
                       // ✅ Premium Filter Option
-                      FutureBuilder<UserModel?>(
-                        future: _userService.getUserById(
-                            FirebaseAuth.instance.currentUser!.uid),
-                        builder: (context, snap) {
-                          final isPremium = snap.data?.isPremium ?? false;
+                      Builder(
+                        builder: (context) {
+                          // Get premium status from the provider
+                          final isPremium = userProvider.isPremium;
 
                           return _buildListItem(
                             icon: Icons.filter_alt_outlined,
@@ -317,10 +326,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                          builder: (_) => const FiltersScreen()),
+                                        builder: (_) => const FiltersScreen(),
+                                      ),
                                     );
                                   }
-                                : null,
+                                : null, // Disables tap if not premium
                           );
                         },
                       ),

@@ -209,7 +209,7 @@ Future<Map<String, dynamic>> updateSwipe({
     final now = DateTime.now();
     // Fetch the latest count *after* potential reset
     final latestUserDoc = await userRef.get();
-    final latestUserData = latestUserDoc.data() as Map<String, dynamic>? ?? {};
+    final latestUserData = latestUserDoc.data() ?? {};
     final lastSwipe = (latestUserData['lastSwipeDate'] as Timestamp?)?.toDate();
     int currentCount = (lastSwipe == null || !isSameDay(now, lastSwipe))
         ? 0
@@ -253,7 +253,7 @@ Future<Map<String, dynamic>> updateSwipe({
     final now = DateTime.now();
     // Fetch latest count
     final latestUserDoc = await userRef.get();
-    final latestUserData = latestUserDoc.data() as Map<String, dynamic>? ?? {};
+    final latestUserData = latestUserDoc.data() ?? {};
     final lastSuperLike = (latestUserData['lastSuperLikeDate'] as Timestamp?)?.toDate();
     int currentSuperCount = (lastSuperLike == null || !isSameDay(now, lastSuperLike))
         ? 0

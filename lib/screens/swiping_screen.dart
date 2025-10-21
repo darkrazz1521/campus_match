@@ -1,3 +1,5 @@
+// /screens/swiping_screen.dart
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
@@ -5,14 +7,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'profile_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../models/user_model.dart';
-import '../services/user_service.dart';
-import '../services/matchmaking_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
-import 'dart:async';
 import 'package:lottie/lottie.dart';
 import 'package:confetti/confetti.dart';
-
+import 'package:provider/provider.dart';
+import '../providers/swipe_provider.dart';
+import 'dart:math' as math;
 
 class SwipingScreen extends StatefulWidget {
   const SwipingScreen({super.key});
@@ -29,31 +29,17 @@ class _SwipingScreenState extends State<SwipingScreen>
   late AnimationController _animationController;
   late ConfettiController _confettiController;
 
-  List<UserModel> profiles = [];
-  bool isLoading = true;
-  bool canSwipe = true; //  Track swipe capability
-  bool isPremium = false; //  Track premium status
-  String? _lastSwipedUserId;
-  final UserService _userService = UserService.instance;
-  final MatchmakingService _matchmakingService = MatchmakingService.instance;
-
-  final int _undosUsedToday = 0;
-  final int _maxFreeUndos = 1;
-  final int _maxPremiumSuperLikes = 10; //  Max Super Likes for Premium users
-  final int _maxPremiumUndos = 10; //  Max Undos after Super Likes are exhausted
-  final bool _isMatchFound = false;
-  bool _isSwiping = false;
-
   @override
   void initState() {
     super.initState();
-    //  Initialize Animation Controller
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
-    _loadProfiles();
+    _confettiController =
+        ConfettiController(duration: const Duration(seconds: 2));
+
+    // Profiles are now loaded automatically by the SwipeProvider
   }
 
   @override
@@ -63,161 +49,90 @@ class _SwipingScreenState extends State<SwipingScreen>
     super.dispose();
   }
 
-  Future<void> _loadProfiles() async {
-    try {
-      final User? currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) return;
-
-      final String currentUid = currentUser.uid;
-      final UserModel? userData = await _userService.getUserById(currentUid);
-
-      if (userData == null) return;
-
-      // 🆕 Check swipe limit
-      final isNewDay = !UserService.isSameDay(
-        DateTime.now(),
-        userData.lastSwipeDate ?? DateTime(2000),
-      );
-      final hasLimit =
-          !userData.isPremium && userData.dailySwipeCount >= 50 && !isNewDay;
-
-      if (isNewDay && mounted) {
-        // notify user that swipes reset
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Your swipes have been reset for today!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-
-      // ✅ 1. Fetch all users
-      final fetchedUsers = await _userService.getAllUsers(currentUid);
-
-      // ✅ 2. Load user’s saved filter preferences
-      final filterPrefs = await _userService.getFilterPreferences(currentUid);
-
-      // ✅ 3. Apply filters only for premium users
-      List<UserModel> processedUsers;
-      if (userData.isPremium && filterPrefs != null) {
-        processedUsers = await _matchmakingService.processMatches(
-          users: fetchedUsers,
-          filters: filterPrefs, // apply saved filters here
-        );
-      } else {
-        processedUsers = await _matchmakingService.processMatches(
-          users: fetchedUsers,
-        );
-      }
-
-      setState(() {
-        profiles = processedUsers;
-        isLoading = false;
-        isPremium = userData.isPremium;
-        canSwipe = userData.isPremium || !hasLimit;
-        _lastSwipedUserId = userData.lastSwipedUserId; // 🆕 Retrieve last swipe
-      });
-    } catch (e) {
-      print("Error loading profiles: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to load profiles: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
-
-  
-
-
   void _showMatchDialog(UserModel matched) {
-  _confettiController.play(); // 🎉 Trigger confetti
+    _confettiController.play(); // 🎉 Trigger confetti
 
-  showGeneralDialog(
-    context: context,
-    barrierLabel: "match",
-    barrierDismissible: true,
-    barrierColor: Colors.black.withOpacity(0.6),
-    transitionDuration: const Duration(milliseconds: 600),
-    pageBuilder: (context, anim1, anim2) {
-      return Stack(
-        alignment: Alignment.center,
-        children: [
-          // 🎊 Confetti burst behind the dialog
-          ConfettiWidget(
-            confettiController: _confettiController,
-            blastDirectionality: BlastDirectionality.explosive,
-            numberOfParticles: 30,
-            maxBlastForce: 40,
-            minBlastForce: 20,
-            gravity: 0.3,
-          ),
+    showGeneralDialog(
+      context: context,
+      barrierLabel: "match",
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.6),
+      transitionDuration: const Duration(milliseconds: 600),
+      pageBuilder: (context, anim1, anim2) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // 🎊 Confetti burst behind the dialog
+            ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              numberOfParticles: 15,
+              maxBlastForce: 20,
+              minBlastForce: 10,
+              gravity: 0.3,
+            ),
 
-          Center(
-            child: ScaleTransition(
-              scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
-              child: Container(
-                width: 320,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.pinkAccent.withOpacity(0.3),
-                      blurRadius: 20,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 🌟 Add Lottie animation on match
-                    Lottie.asset(
-                      'assets/animations/love.json',  // 👈 add your animation
-                      width: 160,
-                      repeat: false,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "It's a Match!",
-                      style: GoogleFonts.beVietnamPro(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+            Center(
+              child: ScaleTransition(
+                scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
+                child: Container(
+                  width: 320,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pinkAccent.withOpacity(0.3),
+                        blurRadius: 20,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      matched.name,
-                      style: GoogleFonts.beVietnamPro(fontSize: 18),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pinkAccent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 🌟 Add Lottie animation on match
+                      Lottie.asset(
+                        'assets/animations/love.json', // 👈 add your animation
+                        width: 160,
+                        repeat: false,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "It's a Match!",
+                        style: GoogleFonts.beVietnamPro(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      child: const Text("Say Hi 💬"),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        matched.name,
+                        style: GoogleFonts.beVietnamPro(fontSize: 18),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.pinkAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text("Say Hi 💬"),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      );
-    },
-  );
-}
-
+          ],
+        );
+      },
+    );
+  }
 
   Widget _buildProfileImage(String photoData) {
     if (photoData.startsWith('http')) {
@@ -270,273 +185,218 @@ class _SwipingScreenState extends State<SwipingScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.bottomCenter,
-      children: [
-        // 🌌 Animated Background
-        AnimatedContainer(
-          duration: const Duration(seconds: 2),
-          decoration: BoxDecoration(gradient: bgGradient),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(painter: _HeartParticlePainter()),
-              ),
-              BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                child: Container(color: Colors.white.withOpacity(0.05)),
-              ),
-            ],
-          ),
-        ),
-
-        // 🃏 Card Swiper
-        isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Colors.pinkAccent),
-              )
-            : profiles.isEmpty
-            ? _buildEmptyState()
-            : Padding(
-                padding: const EdgeInsets.only(top: 80, bottom: 100),
-                child: CardSwiper(
-                  controller: _swiperController,
-                  cardsCount: profiles.length,
-                  numberOfCardsDisplayed: 2,
-                  backCardOffset: const Offset(0, 25),
-                  padding: const EdgeInsets.all(8),
-                  onSwipe: (previousIndex, currentIndex, direction) async {
-  // Prevent swipe if already processing
-  if (_isSwiping) {
-    print("Swipe blocked: Already processing another swipe.");
-    return false; // Prevent card from moving
-  }
-
-  // Validate index
-  if (previousIndex < 0 || previousIndex >= profiles.length) {
-     print("Swipe blocked: Invalid previousIndex $previousIndex");
-     return false;
-  }
-
-  _currentCardIndex = currentIndex ?? 0; // Update current index
-
-  if (!canSwipe) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Daily swipe limit reached! Go Premium for unlimited swipes.",
-        ),
-        backgroundColor: Colors.orange,
-      ),
-    );
-    print("Swipe blocked: Daily limit reached.");
-    return false; // Prevent card from moving
-  }
-
-  // 1. SET LOADING STATE
-  print("Starting swipe processing...");
-  setState(() { _isSwiping = true; });
-
-  final swipedUser = profiles[previousIndex];
-  final currentUid = FirebaseAuth.instance.currentUser!.uid;
-  final bool liked = direction == CardSwiperDirection.right; // Check direction
-
-  Map<String, dynamic> res = {}; // Initialize result map
-
-  try {
-      // 2. AWAIT the result (includes server call if liked)
-      res = await _userService.updateSwipe(
-        currentUid: currentUid,
-        targetUid: swipedUser.uid,
-        liked: liked, // Pass the correct liked status
-        superLike: false, // Super Like is handled by its dedicated button
-      );
-      print("updateSwipe result: $res");
-
-  } catch (e) {
-      print("❌ Error during updateSwipe call: $e");
-      res = {'success': false, 'isMatch': false, 'message': 'An error occurred during swipe.'};
-  } finally {
-      // 3. UNSET LOADING STATE (always do this)
-      if (mounted) { // Check if the widget is still in the tree
-          setState(() { _isSwiping = false; });
-      }
-      print("Swipe processing finished.");
-  }
-
-  if (res['success'] == true) {
-      if (mounted) {
-          setState(() {
-            _lastSwipedUserId = swipedUser.uid; // Track last successful swipe
+    return Consumer<SwipeProvider>(
+      builder: (context, swipeProvider, child) {
+        // --- ADD THIS LOGIC (THE LISTENER) ---
+        // Check if the provider has a match to show
+        if (swipeProvider.matchToShow != null) {
+          // Show the dialog *after* the build frame is complete
+          // This is the safe way to show a dialog from a build method
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Check again in case it was cleared by a rapid rebuild
+            if (swipeProvider.matchToShow != null && mounted) {
+              print("🎉 Match detected by Consumer! Showing dialog.");
+              _showMatchDialog(swipeProvider.matchToShow!);
+              swipeProvider.clearMatchToShow(); // Clear the state
+            }
           });
-      }
+        }
+        // --- END OF LISTENER LOGIC ---
 
-      // 4. SHOW MATCH DIALOG if the server confirmed a match
-      if (res['isMatch'] == true && mounted) {
-          print("🎉 Match confirmed by server! Showing dialog.");
-         _showMatchDialog(swipedUser);
-      }
+        // The rest of your build method returns the Stack
+        return Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            // Background (no change)
+            AnimatedContainer(
+              duration: const Duration(seconds: 2),
+              decoration: BoxDecoration(gradient: bgGradient),
+              child: Stack(
+                  /* ... */
+                  ),
+            ),
 
-      // Reload profiles logic (optional, keep if needed)
-      // if (!isPremium && (profiles.length - _currentCardIndex) <= 5) {
-      //   print("Low on profiles, reloading...");
-      //   _loadProfiles();
-      // }
+            // Card Swiper
+            swipeProvider.isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Colors.pinkAccent),
+                  )
+                : swipeProvider.profiles.isEmpty
+                    ? _buildEmptyState(swipeProvider) // Pass provider
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 80, bottom: 100),
+                        child: CardSwiper(
+                          controller: _swiperController,
+                          cardsCount: swipeProvider.profiles.length,
+                          numberOfCardsDisplayed:
+                              math.min(2, swipeProvider.profiles.length),
+                          backCardOffset: const Offset(0, 25),
+                          padding: const EdgeInsets.all(8),
+                          // --- MODIFY 'onSwipe' ---
+                          onSwipe: (previousIndex, currentIndex, direction) async {
+                            
+                            if (previousIndex < 0 ||
+                                previousIndex >= swipeProvider.profiles.length) {
+                              print(
+                                  "Swipe blocked: Invalid previousIndex $previousIndex");
+                              return false;
+                            }
 
-      return true; // Allow the card swipe animation to complete
-  } else {
-      // Show error message if swipe failed
-      final msg = res['message'] ?? "Swipe failed. Please try again.";
-       if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text(msg), backgroundColor: Colors.red),
-           );
-       }
-      print("Swipe failed: ${res['message']}");
-      return false; // Prevent the card swipe animation
-  }
-},
+                            _currentCardIndex = currentIndex ?? 0;
 
-                  cardBuilder: (context, index, percentX, percentY) {
-                    final profile = profiles[index];
-                    return Transform.translate(
-                      offset: Offset(percentX * 10, percentY * 5),
-                      child: Transform.scale(
-                        scale: 1 - (percentY.abs() * 0.05),
-                        child: _profileCard(profile, percentX.toDouble()),
+                            if (!swipeProvider.canSwipe) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Daily swipe limit reached! Go Premium for unlimited swipes.",
+                                  ),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
+                              print("Swipe blocked: Daily limit reached.");
+                              return false;
+                            }
+
+                            final swipedUser =
+                                swipeProvider.profiles[previousIndex];
+                            final bool liked =
+                                direction == CardSwiperDirection.right;
+
+                            // --- THIS IS THE FIX ---
+                            // DO NOT AWAIT. Call it and forget.
+                            swipeProvider.swipe(
+                              swipedUser, // Pass the full user object
+                              liked,
+                              false, // Not a super like
+                            );
+
+                            // Return true IMMEDIATELY to unblock the UI
+                            return true;
+                            // --- END FIX ---
+                          },
+                          cardBuilder: (context, index, percentX, percentY) {
+                            // Check index boundary
+                            if (index >= swipeProvider.profiles.length) {
+                              return Container(); // Return empty container if index is out of bounds
+                            }
+                            final profile = swipeProvider.profiles[index];
+                            return _profileCard(profile, percentX.toDouble());
+                          },
+                        ),
                       ),
-                    );
-                  },
-                ),
+
+            // Swipe Buttons
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _glowButton(
+                    Icons.close,
+                    Colors.redAccent,
+                    (swipeProvider.isSwiping || swipeProvider.profiles.isEmpty)
+                        ? null
+                        : () =>
+                            _swiperController.swipe(CardSwiperDirection.left),
+                  ),
+                  _glowButton(
+                    Icons.favorite,
+                    primaryColor,
+                    (swipeProvider.isSwiping || swipeProvider.profiles.isEmpty)
+                        ? null
+                        : () =>
+                            _swiperController.swipe(CardSwiperDirection.right),
+                  ),
+
+                  // Third button: undo / super-like
+                  Builder(
+                    builder: (context) {
+                      // We get user data from swipeProvider's currentUser
+                      final currentUserData = swipeProvider.currentUser;
+                      if (currentUserData == null)
+                        return Container(); // User not loaded yet
+
+                      final isPremiumLocal = currentUserData.isPremium;
+                      final superLikesUsed =
+                          currentUserData.superLikesUsedToday ?? 0;
+
+                      // Use constants for clarity
+                      final int maxPremiumSuperLikes = 10;
+
+                      final bool isSuperLikeMode = isPremiumLocal &&
+                          superLikesUsed < maxPremiumSuperLikes;
+                      final bool isUndoAvailable =
+                          swipeProvider.lastSwipedUserId != null;
+
+                      final icon = isSuperLikeMode ? Icons.star : Icons.undo;
+                      final color = isSuperLikeMode
+                          ? Colors.blueAccent
+                          : (isUndoAvailable ? Colors.amber : Colors.grey);
+
+                      final onPressed = (swipeProvider.isSwiping ||
+                              swipeProvider.profiles.isEmpty)
+                          ? null
+                          : () async {
+                              // This can stay async for the undo logic
+                              if (isSuperLikeMode) {
+                                // Super like flow
+                                final index = _currentCardIndex;
+                                if (index < 0 ||
+                                    index >= swipeProvider.profiles.length)
+                                  return;
+
+                                final target = swipeProvider.profiles[index];
+
+                                // --- MODIFY THE SUPER-LIKE CALL ---
+                                // DO NOT AWAIT
+                                swipeProvider.swipe(
+                                  target, // Pass the full user object
+                                  true,
+                                  true, // Super Like
+                                );
+
+                                // Just animate the card
+                                _swiperController
+                                    .swipe(CardSwiperDirection.right);
+
+                                // We NO LONGER check for match here.
+                                // The Consumer logic will handle it.
+                                // --- END FIX ---
+                              } else {
+                                // Undo flow (this logic is fine)
+                                if (!isUndoAvailable) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content:
+                                            Text("No swipe recorded to undo.")),
+                                  );
+                                  return;
+                                }
+
+                                final res =
+                                    await swipeProvider.revertLastSwipe();
+
+                                if (res['success'] == true) {
+                                  _swiperController.undo();
+                                  // Provider handles reloading profiles
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                        content:
+                                            Text(res['message'] ?? "Undo failed.")),
+                                  );
+                                }
+                              }
+                            };
+                      return _glowButton(icon, color, onPressed);
+                    },
+                  ),
+                ],
               ),
-
-        // ❤️ Swipe Buttons (replaced)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _glowButton(
- Icons.close,
- Colors.redAccent,
- (_isSwiping || profiles.isEmpty)
-? null
-: () => _swiperController.swipe(CardSwiperDirection.left),
-),
- _glowButton(
- Icons.favorite,
- primaryColor,
- (_isSwiping || profiles.isEmpty)
-? null
- : () => _swiperController.swipe(CardSwiperDirection.right),
- ),
-
-              // Third button: undo for free / super-like for premium
-              FutureBuilder<UserModel?>(
-                future: _userService.getUserById(
-                  FirebaseAuth.instance.currentUser!.uid,
-                ),
-                builder: (context, snap) {
-                  final currentUserData = snap.data;
-                  final isPremiumLocal =
-                      currentUserData?.isPremium ?? isPremium;
-                  final superLikesUsed =
-                      currentUserData?.superLikesUsedToday ?? 0;
-
-                  // Determine Button Mode (Rule 3)
-                  final bool isSuperLikeMode =
-                      isPremiumLocal && superLikesUsed < _maxPremiumSuperLikes;
-                  final bool isUndoAvailable = _lastSwipedUserId != null;
-
-                  final icon = isSuperLikeMode ? Icons.star : Icons.undo;
-                  final color = isSuperLikeMode
-                      ? Colors.blueAccent
-                      : (isUndoAvailable ? Colors.amber : Colors.grey);
-
-                  final onPressed = (_isSwiping || profiles.isEmpty)
-? null
- : () async {
- // Set processing state for button action
-// setState(() => _isSwiping = true); 
- final uid = FirebaseAuth.instance.currentUser!.uid;
- 
- try {
- if (isSuperLikeMode) {
- // Super like flow
- final index = _currentCardIndex;
- if (index < 0 || index >= profiles.length) return;
- final target = profiles[index];
- final res = await _userService.updateSwipe(
- currentUid: uid,
- targetUid: target.uid,
- liked: true,
- superLike: true,
- );
- if (res['success'] == true) {
- setState(() {
- _lastSwipedUserId = target.uid;
- });
- // force swipe right visually
- _swiperController.swipe(CardSwiperDirection.right);
- if (res['isMatch'] == true) {
- _showMatchDialog(target);
- }
- } else {
- final msg = res['message']?? 'Super Like failed';
- ScaffoldMessenger.of(
- context,
- ).showSnackBar(SnackBar(content: Text(msg)));
-}
- } else {
-// Undo flow 
- if (_lastSwipedUserId == null) {
- ScaffoldMessenger.of(context).showSnackBar(
- const SnackBar(
- content: Text("No swipe recorded to undo."),
- ),
- );
- return;
- }
-
- // Determine the max undo limit to send to the service layer (Rule 3)
- final maxAllowedUndos =
- isPremiumLocal &&
- superLikesUsed >= _maxPremiumSuperLikes
-? _maxPremiumUndos // 10 undos if super likes exhausted
- : _maxFreeUndos; // 1 undo for free users
-
- final res = await _userService.revertLastSwipe(
- uid,
- maxFreeUndos: maxAllowedUndos,
- );
-
- if (res['success'] == true) {
- setState(() {
- _lastSwipedUserId = null; // Clear tracking after success
- });
- _swiperController.undo();
- // Reload profiles to re-fetch the undone profile
- _loadProfiles();
- } else {
- ScaffoldMessenger.of(context).showSnackBar(
- SnackBar(
- content: Text(res['message']?? "Undo failed."),
- ),
- );
- }
- }
- } finally {
- setState(() => _isSwiping = false); // Clear processing state
- }
- };
- return _glowButton(icon, color, onPressed);
- },
-                
-              ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -803,39 +663,41 @@ class _SwipingScreenState extends State<SwipingScreen>
   }
 
   Widget _glowButton(IconData icon, Color color, VoidCallback? onPressed) {
- final bool isDisabled = onPressed == null;
- final Color displayColor = isDisabled? Colors.grey.shade400 : color;
- final double elevation = isDisabled? 0 : 20;
+    final bool isDisabled = onPressed == null;
+    final Color displayColor = isDisabled ? Colors.grey.shade400 : color;
+    final double elevation = isDisabled ? 0 : 20;
 
- return GestureDetector(
- // Only execute handlers if not disabled
- onTapDown: isDisabled? null : (_) => HapticFeedback.mediumImpact(),
- onTap: onPressed,
- child: AnimatedContainer(
- duration: const Duration(milliseconds: 150),
- curve: Curves.easeOut,
- transform: Matrix4.identity()..scale(1.0),
- decoration: BoxDecoration(
- shape: BoxShape.circle,
- boxShadow: [
-          BoxShadow(
-            color: isDisabled ? Colors.transparent : displayColor.withOpacity(0.45), // Use displayColor
-            blurRadius: elevation,
-            spreadRadius: isDisabled ? 0 : 3,
-          ),
-        ],
- ),
- child: CircleAvatar(
- radius: 34,
- backgroundColor:
- isDisabled? Colors.grey.shade200 : Colors.white.withOpacity(0.95),
- child: Icon(icon, size: 32, color: displayColor),
- ),
- ),
- );
-}
+    return GestureDetector(
+      // Only execute handlers if not disabled
+      onTapDown: isDisabled ? null : (_) => HapticFeedback.mediumImpact(),
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()..scale(1.0),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: isDisabled
+                  ? Colors.transparent
+                  : displayColor.withOpacity(0.45), // Use displayColor
+              blurRadius: elevation,
+              spreadRadius: isDisabled ? 0 : 3,
+            ),
+          ],
+        ),
+        child: CircleAvatar(
+          radius: 34,
+          backgroundColor:
+              isDisabled ? Colors.grey.shade200 : Colors.white.withOpacity(0.95),
+          child: Icon(icon, size: 32, color: displayColor),
+        ),
+      ),
+    );
+  }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(SwipeProvider provider) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -859,7 +721,8 @@ class _SwipingScreenState extends State<SwipingScreen>
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            onPressed: _loadProfiles,
+            // Call provider's loadProfiles method
+            onPressed: () => provider.loadProfiles(),
             child: const Text(
               "Refresh Profiles",
               style: TextStyle(color: Colors.white, fontSize: 16),
