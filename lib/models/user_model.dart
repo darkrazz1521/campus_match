@@ -12,6 +12,10 @@ class UserModel {
   final String branch;
   final bool? isOnline;
 
+  // --- ⬇️ ADD THIS ⬇️ ---
+  final int pqi; // Profile Quality Index
+  // --- ⬆️ END ADD ⬆️ ---
+
   
 
   // Premium & limits
@@ -40,6 +44,7 @@ class UserModel {
     required this.photos,
     required this.interests,
     required this.branch,
+    this.pqi = 0, // 👈 ADD THIS (with default)
     this.isPremium = false,
     this.dailySwipeCount = 0,
     this.lastSwipeDate,
@@ -64,6 +69,7 @@ class UserModel {
       photos: List<String>.from(json['photos'] ?? []),
       interests: List<String>.from(json['interests'] ?? []),
       branch: json['branch'] ?? '',
+      pqi: json['pqi'] ?? 0, // 👈 ADD THIS
       matchScore: (json['matchScore'] ?? 0).toDouble(),
       distance: json['distance'] ?? 'Unknown',
       isPremium: json['isPremium'] ?? false,
@@ -109,6 +115,7 @@ class UserModel {
       'photos': photos,
       'interests': interests,
       'branch': branch,
+      'pqi': pqi, // 👈 ADD THIS
       'matchScore': matchScore,
       'distance': distance,
       'isPremium': isPremium,
@@ -133,6 +140,7 @@ class UserModel {
     List<String>? photos,
     List<String>? interests,
     String? branch,
+    int? pqi, // 👈 ADD THIS
     List<String>? likedUsers,
     List<String>? passedUsers,
     List<String>? matches,
@@ -159,6 +167,7 @@ class UserModel {
       photos: photos ?? this.photos,
       interests: interests ?? this.interests,
       branch: branch ?? this.branch,
+      pqi: pqi ?? this.pqi, // 👈 ADD THIS
       isPremium: isPremium ?? this.isPremium,
       dailySwipeCount: dailySwipeCount ?? this.dailySwipeCount,
       lastSwipeDate: lastSwipeDate ?? this.lastSwipeDate,

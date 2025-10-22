@@ -74,6 +74,8 @@ class SwipeProvider with ChangeNotifier {
 
 // In /providers/swipe_provider.dart
 
+  // In /providers/swipe_provider.dart
+
 Future<void> loadProfiles() async {
   // --- Start Enhanced Debugging ---
   print("--- Starting loadProfiles ---");
@@ -84,64 +86,58 @@ Future<void> loadProfiles() async {
     return;
   }
   final String currentUid = _currentUser!.uid;
+  final UserModel currentUser = _currentUser!; // Get a non-null local copy
+
   if (currentUid.isEmpty) {
-     print("❌ ERROR: currentUid is EMPTY at start of loadProfiles. Aborting.");
-     _isLoading = false;
-     notifyListeners();
-     return;
+    print("❌ ERROR: currentUid is EMPTY at start of loadProfiles. Aborting.");
+    _isLoading = false;
+    notifyListeners();
+    return;
   }
   print("✅ Current User UID: $currentUid");
   // --- End Enhanced Debugging ---
 
   _isLoading = true;
-  _profilesLoaded = true;
+  _profilesLoaded = true; // Mark as 'loading attempt in progress'
   notifyListeners(); // Let UI show loading indicator
 
   try {
-    // Check swipe limit (ensure _currentUser is still valid here)
-    final currentUserDataForLimit = _currentUser!; // Use a local non-null variable
-    final isNewDay = !UserService.isSameDay(
-      DateTime.now(),
-      currentUserDataForLimit.lastSwipeDate ?? DateTime(2000),
-    );
-    // Note: Re-calculating hasLimit later with potentially fresher data.
+    // 1. Load filters FIRST
+    print("  Loading filter preferences...");
+    final filterPrefs = await _userService.getFilterPreferences(currentUid);
+    print("  Filter preferences loaded: ${filterPrefs != null}");
 
-    // 1. Fetch all users
-    print("  Fetching users excluding $currentUid...");
-    final fetchedUsers = await _userService.getAllUsers(currentUid);
+    // 2. Fetch users using the new query-level filters
+    print("  Fetching users with new paginated query...");
+    // Pass the full currentUser and filters
+    final fetchedUsers = await _userService.getAllUsers(
+      currentUser,
+      filterPrefs,
+    );
     print("  Fetched ${fetchedUsers.length} users.");
     // --- Add Check: Does fetchedUsers contain currentUid? ---
     if (fetchedUsers.any((user) => user.uid == currentUid)) {
-       print("‼️ CRITICAL ERROR: getAllUsers returned the current user!");
+      print("‼️ CRITICAL ERROR: getAllUsers returned the current user!");
     }
     // --- End Check ---
 
 
-    // 2. Load filters
-    print("  Loading filter preferences...");
-    final filterPrefs = await _userService.getFilterPreferences(currentUid);
-     print("  Filter preferences loaded: ${filterPrefs != null}");
-
-    // 3. Apply matchmaking logic
-    print("  Processing matches...");
+    // 3. Apply matchmaking logic (scoring, sorting, and complex filters)
+    print("  Processing matches (scoring, sorting, complex filters)...");
     List<UserModel> processedUsers;
-    // --- Pass currentUser explicitly IF NEEDED, but your code doesn't seem to ---
-    // Ensure processMatches doesn't modify the input list reference if possible
-    // (Dart lists passed by reference) - It returns a new list which is good.
-    if (currentUserDataForLimit.isPremium && filterPrefs != null) {
-      processedUsers = await _matchmakingService.processMatches(
-        users: List<UserModel>.from(fetchedUsers), // Pass a copy just in case
-        filters: filterPrefs,
-      );
-    } else {
-      processedUsers = await _matchmakingService.processMatches(
-        users: List<UserModel>.from(fetchedUsers), // Pass a copy just in case
-      );
-    }
+
+    // Pass filters to processMatches, which will now only use
+    // the filters that were NOT applied at the query level (e.g., interests)
+    processedUsers = await _matchmakingService.processMatches(
+      users: List<UserModel>.from(fetchedUsers), // Pass a copy
+      filters: filterPrefs,
+      currentUser: currentUser, // Pass currentUser for matchmaking logic
+    );
+
     print("  Processed ${processedUsers.length} users.");
     // --- Add Check: Did processMatches re-introduce currentUid? ---
-     if (processedUsers.any((user) => user.uid == currentUid)) {
-       print("‼️ CRITICAL ERROR: processMatches added the current user back!");
+    if (processedUsers.any((user) => user.uid == currentUid)) {
+      print("‼️ CRITICAL ERROR: processMatches added the current user back!");
     }
     // --- End Check ---
 
@@ -151,35 +147,32 @@ Future<void> loadProfiles() async {
     _profiles = processedUsers.where((user) => user.uid != currentUid).toList();
     print("  Final profile count: ${_profiles.length}");
     if (processedUsers.length != _profiles.length) {
-         print("  ℹ️ Safeguard filter removed the current user (count was ${processedUsers.length}).");
+      print(
+          "  ℹ️ Safeguard filter removed the current user (count was ${processedUsers.length}).");
     }
 
 
     _isLoading = false;
 
-    // 5. Fetch latest user data for swipe status
-    print("  Fetching latest user data for swipe status...");
-    final latestUser = await _userService.getUserById(currentUid);
-    _currentUser = latestUser; // Update the provider's currentUser
+    // 5. Update swipe status from local data (no need to re-fetch)
+    print("  Updating swipe status from local currentUser data...");
 
-    if (_currentUser != null) {
-      final isNewDayForLimit = !UserService.isSameDay(
-        DateTime.now(),
-        _currentUser!.lastSwipeDate ?? DateTime(2000),
-      );
-      final bool hasLimit = !_currentUser!.isPremium &&
-                            (_currentUser!.dailySwipeCount >= 50) &&
-                            !isNewDayForLimit;
+    // We already have the latest user data from the `_currentUser` variable
+    final isNewDayForLimit = !UserService.isSameDay(
+      DateTime.now(),
+      currentUser.lastSwipeDate ?? DateTime(2000),
+    );
+    
+    // Use the 50-swipe limit for the *action*, not the 30-profile load limit
+    const int dailySwipeLimit = 50; 
+    final bool hasLimit = !currentUser.isPremium &&
+        (currentUser.dailySwipeCount >= dailySwipeLimit) &&
+        !isNewDayForLimit;
 
-      _canSwipe = _currentUser!.isPremium || !hasLimit;
-      _lastSwipedUserId = _currentUser!.lastSwipedUserId;
-       print("  Swipe status updated: canSwipe=$_canSwipe, lastSwipedUserId=$_lastSwipedUserId");
-    } else {
-      print("⚠️ Could not fetch latest user data.");
-      _canSwipe = false;
-      _lastSwipedUserId = null;
-    }
-
+    _canSwipe = currentUser.isPremium || !hasLimit;
+    _lastSwipedUserId = currentUser.lastSwipedUserId;
+    print(
+        "  Swipe status updated: canSwipe=$_canSwipe, lastSwipedUserId=$_lastSwipedUserId");
   } catch (e, stackTrace) { // Added stackTrace
     print("❌❌❌ FATAL ERROR in loadProfiles: $e");
     print(stackTrace); // Print stack trace for detailed debugging

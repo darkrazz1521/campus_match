@@ -1,5 +1,6 @@
 import '../models/user_model.dart';
 import 'user_service.dart';
+import 'dart:math';
 
 class MatchmakingService {
   static final MatchmakingService _instance = MatchmakingService._internal();
@@ -41,27 +42,25 @@ return (score / 100).clamp(0.0, 1.0);
 
   /// Core matching logic — now includes premium filters
   /// Core matching logic — now includes premium filters
+  /// Core matching logic — now includes premium filters
   Future<List<UserModel>> processMatches({
     required List<UserModel> users,
+    required UserModel currentUser, // Make sure this parameter is here
     Map<String, dynamic>? filters,
   }) async {
-    final currentUid = await _userService.getCurrentUid();
-    final currentUser = await _userService.getUserById(currentUid);
-    if (currentUser == null) return users;
+    // We no longer need to fetch currentUser, it's passed in.
 
-    // --- ADDED ---
     // Fetch all UIDs that have super-liked the current user
+    // The crash is happening in this query.
     final superLikersQuery = await _userService.likesCollection
-    .where('targetUid', isEqualTo: currentUid)
-    .where('superLike', isEqualTo: true)
-    .where('liked', isEqualTo: true) // Ensure it's an active 'like'
-    .get();
+        .where('targetUid', isEqualTo: currentUser.uid)
+        .where('superLike', isEqualTo: true)
+        .where('liked', isEqualTo: true) // Ensure it's an active 'like'
+        .get();
 
-    
     final Set<String> superLikerUids = superLikersQuery.docs
         .map((doc) => doc['sourceUid'] as String)
         .toSet();
-    // --- END ADDED ---
 
     List<UserModel> filteredUsers = users;
 
@@ -74,27 +73,24 @@ return (score / 100).clamp(0.0, 1.0);
 
     // 🧠 2. Apply advanced filters — only for premium users
     if (currentUser.isPremium && filters != null) {
-      // Branch Filter
-      if (filters['branch'] != null && filters['branch'].toString().isNotEmpty) {
-        filteredUsers = filteredUsers
-            .where((u) => u.branch == filters['branch'])
-            .toList();
-      }
+      // --- REMOVED ---
+      // 'branch' filter is now done in the Firestore query (in UserService.getAllUsers)
+      // 'collegeYear' filter is now done in the Firestore query
+      // --- END REMOVED ---
 
-      // Year Filter
-      if (filters['collegeYear'] != null &&
-          filters['collegeYear'].toString().isNotEmpty) {
-        filteredUsers = filteredUsers
-            .where((u) => u.collegeYear == filters['collegeYear'])
-            .toList();
-      }
+      // --- KEPT ---
+      // 'interests' and 'distance' are complex filters, so we
+      // still apply them in-memory after the initial fetch.
 
       // Interests Filter
       if (filters['interests'] != null && filters['interests'] is List) {
         final selectedInterests = List<String>.from(filters['interests']);
-        filteredUsers = filteredUsers.where((u) {
-          return u.interests.any((i) => selectedInterests.contains(i));
-        }).toList();
+        if (selectedInterests.isNotEmpty) {
+          // Only filter if interests are selected
+          filteredUsers = filteredUsers.where((u) {
+            return u.interests.any((i) => selectedInterests.contains(i));
+          }).toList();
+        }
       }
 
       // Distance Filter (optional — assuming u.distance is a string like “12 km”)
@@ -110,18 +106,16 @@ return (score / 100).clamp(0.0, 1.0);
           }
         }).toList();
       }
+      // --- END KEPT ---
     }
 
     // 🎯 3. Compute match score + simulate distance
     final processed = filteredUsers.map((u) {
-      
-      // --- MODIFIED ---
       // Check if this user 'u' is in the set of people who super-liked us
       final bool isSuperLikedByThisUser = superLikerUids.contains(u.uid);
-      
-      final matchScore =
-          calculateMatchScore(currentUser, u, isSuperLikedByB: isSuperLikedByThisUser);
-      // --- END MODIFIED ---
+
+      final matchScore = calculateMatchScore(currentUser, u,
+          isSuperLikedByB: isSuperLikedByThisUser);
 
       // simulate random-ish distance for now (later use actual lat/lng)
       final distance = "${(10 + (u.name.hashCode % 90)).toString()} km";
@@ -129,12 +123,29 @@ return (score / 100).clamp(0.0, 1.0);
       return u.copyWith(matchScore: matchScore, distance: distance);
     }).toList();
 
-    // 🔝 4. Sort for premium users by match score
-    if (currentUser.isPremium) {
-      processed.sort((a, b) => b.matchScore.compareTo(a.matchScore));
-    }
+    // 🔝 4. Sort for premium users by match score (with weighted randomness)
+final random = Random(); // Initialize random number generator
 
-    return processed;
+if (currentUser.isPremium) {
+  print("   Applying premium weighted-random sort...");
+  processed.sort((a, b) {
+    // Apply a random "jitter" to each score, centered around 1.0
+    // This creates a "weighted shuffle"
+    // We use (0.8 + 0.4) to get a random multiplier between 0.8 and 1.2
+    final double boostA = 0.8 + (random.nextDouble() * 0.4);
+    final double boostB = 0.8 + (random.nextDouble() * 0.4);
+
+    // Compare the "boosted" scores
+    // Note: The super-like boost is already baked into the 'matchScore'
+    return (b.matchScore * boostB).compareTo(a.matchScore * boostA);
+  });
+} else {
+  // Optional: Even free users can get a basic shuffle
+  // so they don't see the exact same order every time.
+  processed.shuffle(random);
+}
+
+return processed;
   }
 
   /// Handle swipe action (like, nope, superlike)

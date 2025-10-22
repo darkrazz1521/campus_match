@@ -82,41 +82,84 @@ return {
 
   /// 🔹 Fetch all users except current
   // In /services/user_service.dart
-Future<List<UserModel>> getAllUsers(String currentUid) async {
-  // Add temporary check
-  if (currentUid.isEmpty) {
-     print("❌ ERROR in getAllUsers: Received empty currentUid!");
-     // Maybe throw an error or return empty list?
-     return [];
-  }
-  print("   getAllUsers: Filtering out UID: $currentUid");
 
-  final query = await _firestore.collection('users').get();
-  final allDocs = query.docs;
-  print("   getAllUsers: Fetched ${allDocs.length} total user docs.");
+  // [REPLACED] Now accepts currentUser and filters to build an efficient query
+  Future<List<UserModel>> getAllUsers(
+    UserModel currentUser,
+    Map<String, dynamic>? filters,
+  ) async {
+    final String currentUid = currentUser.uid;
+    if (currentUid.isEmpty) {
+      print("❌ ERROR in getAllUsers: Received empty currentUid!");
+      return [];
+    }
+    print("   getAllUsers: Filtering out UID: $currentUid");
 
-  final filteredDocs = allDocs.where((doc) => doc.id != currentUid);
-  print("   getAllUsers: Filtered down to ${filteredDocs.length} docs.");
+    // Start with the base query
+    Query query = _firestore
+        .collection('users')
+        .where('uid', isNotEqualTo: currentUid);
 
-  // Add a check right before returning
-  final resultList = filteredDocs
-      .map((doc) {
+    // 💡 Apply Premium Filters AT THE QUERY LEVEL
+    if (currentUser.isPremium && filters != null) {
+      print("   Applying premium filters to query...");
+      if (filters['branch'] != null && filters['branch'].toString().isNotEmpty) {
+        try {
+          // Note: This query requires a composite index in Firestore.
+          // If this fails, go to the Firebase console and create the index
+          // it suggests in the error log.
+          query = query.where('branch', isEqualTo: filters['branch']);
+          print("   -> Added filter: branch == ${filters['branch']}");
+        } catch (e) {
+          print(
+              "   ⚠️ WARNING: Could not apply 'branch' filter. Check composite indexes in Firestore. $e");
+        }
+      }
+      if (filters['collegeYear'] != null &&
+          filters['collegeYear'].toString().isNotEmpty) {
+        try {
+          // Note: This query also requires a composite index.
+          query = query.where('collegeYear', isEqualTo: filters['collegeYear']);
+          print("   -> Added filter: collegeYear == ${filters['collegeYear']}");
+        } catch (e) {
+          print(
+              "   ⚠️ WARNING: Could not apply 'collegeYear' filter. Check composite indexes in Firestore. $e");
+        }
+      }
+      // Note: 'interests' (array-contains-any) and 'distance' (geo-query)
+      // are more complex. We will leave them for in-memory filtering for now.
+    }
+
+    // 💡 Apply Free/Premium Limit
+    final int limit = currentUser.isPremium ? 100 : 30;
+    query = query.limit(limit);
+    print("   Applying limit: $limit");
+
+    // Execute the query
+    final querySnapshot = await query.get();
+    final allDocs = querySnapshot.docs;
+    print("   getAllUsers: Fetched ${allDocs.length} total user docs.");
+
+    // Parse the results
+    final resultList = allDocs
+        .map((doc) {
           try {
-              return UserModel.fromJson(doc.data());
+            return UserModel.fromJson(doc.data() as Map<String, dynamic>);
           } catch (e) {
-              print("❌ ERROR parsing user data for doc ID ${doc.id}: $e");
-              return null; // Return null for invalid data
+            print("❌ ERROR parsing user data for doc ID ${doc.id}: $e");
+            return null;
           }
-      })
-      .whereType<UserModel>() // Filter out any nulls from parsing errors
-      .toList();
+        })
+        .whereType<UserModel>()
+        .toList();
 
-  if (resultList.any((user) => user.uid == currentUid)) {
-     print("‼️ CRITICAL ERROR in getAllUsers: Result list STILL contains current user!");
+    if (resultList.any((user) => user.uid == currentUid)) {
+      print(
+          "‼️ CRITICAL ERROR in getAllUsers: Result list STILL contains current user!");
+    }
+
+    return resultList;
   }
-
-  return resultList;
-}
 
   /// 🔹 Fetch all users (raw)
   Future<List<UserModel>> fetchUsers() async {
