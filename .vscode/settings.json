@@ -1,4 +1,4 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.configuration.updateBuildConfiguration": "automatic",
     "cmake.sourceDirectory": "C:/Users/siddh/flutter_pro/campus_match/linux"
 }

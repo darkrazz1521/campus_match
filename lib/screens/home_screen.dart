@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'swiping_screen.dart';
-import 'chat_screen.dart';
+import 'chat_list_screen.dart';
 import 'confessions_screen.dart';
 import 'profile_screen.dart'; // This is ProfileSetupScreen
 import 'settings_screen.dart';
@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _pages = const [
     SwipingScreen(),
-    ChatScreen(),
+    ChatListScreen(),
     ConfessionsScreen(),
     ProfileSetupScreen(),
   ];

@@ -13,7 +13,8 @@ class MatchmakingService {
   
 
   /// Calculate compatibility match score
-  double calculateMatchScore(UserModel userA, UserModel userB, {bool isSuperLikedByA = false}) {
+  /// Calculate compatibility match score
+  double calculateMatchScore(UserModel userA, UserModel userB, {bool isSuperLikedByB = false}) {
     double score = 0;
 
     // Interests similarity
@@ -27,17 +28,18 @@ class MatchmakingService {
     if (userA.gender != userB.gender) score += 5;
 
     // Similar words in bio (soft text matching)
-    // Similar words in bio (soft text matching)
 if (userA.bio.split(' ').any((word) => word.length > 2 && userB.bio.contains(word))) {
 score += 5;
 }
 
 // Boost for super-like (Rule 1: +0.2 to final score)
-if (isSuperLikedByA) score += 20; 
+// This now means userB (the profile being shown) super-liked userA (the current user)
+if (isSuperLikedByB) score += 20; 
 
 return (score / 100).clamp(0.0, 1.0);
 }
 
+  /// Core matching logic — now includes premium filters
   /// Core matching logic — now includes premium filters
   Future<List<UserModel>> processMatches({
     required List<UserModel> users,
@@ -46,6 +48,20 @@ return (score / 100).clamp(0.0, 1.0);
     final currentUid = await _userService.getCurrentUid();
     final currentUser = await _userService.getUserById(currentUid);
     if (currentUser == null) return users;
+
+    // --- ADDED ---
+    // Fetch all UIDs that have super-liked the current user
+    final superLikersQuery = await _userService.likesCollection
+    .where('targetUid', isEqualTo: currentUid)
+    .where('superLike', isEqualTo: true)
+    .where('liked', isEqualTo: true) // Ensure it's an active 'like'
+    .get();
+
+    
+    final Set<String> superLikerUids = superLikersQuery.docs
+        .map((doc) => doc['sourceUid'] as String)
+        .toSet();
+    // --- END ADDED ---
 
     List<UserModel> filteredUsers = users;
 
@@ -98,9 +114,14 @@ return (score / 100).clamp(0.0, 1.0);
 
     // 🎯 3. Compute match score + simulate distance
     final processed = filteredUsers.map((u) {
-      final isSuperLikedByCurrent = false;
+      
+      // --- MODIFIED ---
+      // Check if this user 'u' is in the set of people who super-liked us
+      final bool isSuperLikedByThisUser = superLikerUids.contains(u.uid);
+      
       final matchScore =
-          calculateMatchScore(currentUser, u, isSuperLikedByA: isSuperLikedByCurrent);
+          calculateMatchScore(currentUser, u, isSuperLikedByB: isSuperLikedByThisUser);
+      // --- END MODIFIED ---
 
       // simulate random-ish distance for now (later use actual lat/lng)
       final distance = "${(10 + (u.name.hashCode % 90)).toString()} km";

@@ -81,13 +81,42 @@ return {
   }
 
   /// 🔹 Fetch all users except current
-  Future<List<UserModel>> getAllUsers(String currentUid) async {
-    final query = await _firestore.collection('users').get();
-    return query.docs
-        .where((doc) => doc.id != currentUid)
-        .map((doc) => UserModel.fromJson(doc.data()))
-        .toList();
+  // In /services/user_service.dart
+Future<List<UserModel>> getAllUsers(String currentUid) async {
+  // Add temporary check
+  if (currentUid.isEmpty) {
+     print("❌ ERROR in getAllUsers: Received empty currentUid!");
+     // Maybe throw an error or return empty list?
+     return [];
   }
+  print("   getAllUsers: Filtering out UID: $currentUid");
+
+  final query = await _firestore.collection('users').get();
+  final allDocs = query.docs;
+  print("   getAllUsers: Fetched ${allDocs.length} total user docs.");
+
+  final filteredDocs = allDocs.where((doc) => doc.id != currentUid);
+  print("   getAllUsers: Filtered down to ${filteredDocs.length} docs.");
+
+  // Add a check right before returning
+  final resultList = filteredDocs
+      .map((doc) {
+          try {
+              return UserModel.fromJson(doc.data());
+          } catch (e) {
+              print("❌ ERROR parsing user data for doc ID ${doc.id}: $e");
+              return null; // Return null for invalid data
+          }
+      })
+      .whereType<UserModel>() // Filter out any nulls from parsing errors
+      .toList();
+
+  if (resultList.any((user) => user.uid == currentUid)) {
+     print("‼️ CRITICAL ERROR in getAllUsers: Result list STILL contains current user!");
+  }
+
+  return resultList;
+}
 
   /// 🔹 Fetch all users (raw)
   Future<List<UserModel>> fetchUsers() async {

@@ -23,28 +23,40 @@ class UserProvider with ChangeNotifier {
   }
 
   // When auth state changes, fetch user data or clear it
+  // In /providers/user_provider.dart
+
   Future<void> _onAuthStateChanged(User? user) async {
+    print("UserProvider._onAuthStateChanged: User is ${user?.uid ?? 'null'}");
     if (user != null) {
-      await fetchCurrentUser(user.uid);
-      if (_currentUser != null) {
-        _saveFcmToken(_currentUser!.uid); // Save FCM token on login
+      await fetchCurrentUser(user.uid); // Fetch data FIRST
+      if (_currentUser != null) { // Check if fetch was successful
+        _saveFcmToken(_currentUser!.uid);
+        print("   User loaded: ${_currentUser!.uid}");
+      } else {
+         print("   Failed to fetch user data after auth change.");
+         // Handle error case - maybe sign out user?
+         // For now, setting loading to false and notifying is okay.
+         _isLoading = false;
+         notifyListeners();
       }
     } else {
       _currentUser = null;
-      _isLoading = false;
-      notifyListeners();
+      _isLoading = false; // Set loading false on logout
+      notifyListeners(); // Notify UI about logout
+      print("   User logged out.");
     }
   }
 
-  // Fetches user data from Firestore
   Future<void> fetchCurrentUser(String uid) async {
+    print("UserProvider.fetchCurrentUser: Fetching data for $uid...");
     _isLoading = true;
-    notifyListeners();
-    
-    _currentUser = await _userService.getUserById(uid);
-    
-    _isLoading = false;
-    notifyListeners();
+    notifyListeners(); // Notify UI that loading started
+
+    _currentUser = await _userService.getUserById(uid); // Await the fetch
+
+    _isLoading = false; // Set loading false AFTER fetch completes
+    notifyListeners(); // Notify UI that loading finished (with or without user data)
+    print("   Fetch complete. User data ${ _currentUser != null ? 'loaded' : 'NOT found'}.");
   }
 
   // This logic is moved from HomeScreen

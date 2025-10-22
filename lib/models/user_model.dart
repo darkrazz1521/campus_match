@@ -10,6 +10,7 @@ class UserModel {
   final List<String> photos;
   final List<String> interests;
   final String branch;
+  final bool? isOnline;
 
   
 
@@ -49,6 +50,7 @@ class UserModel {
     this.matchScore = 0.0,
     this.distance = 'Unknown',
     this.lastSwipedUserId,
+    this.isOnline,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -92,6 +94,7 @@ class UserModel {
                   : null),
 
       lastSwipedUserId: json['lastSwipedUserId'],
+      isOnline: json['isOnline'],
     );
   }
 
@@ -116,6 +119,7 @@ class UserModel {
       'superLikesUsedToday': superLikesUsedToday,
       'lastSuperLikeDate': lastSuperLikeDate,
       'lastSwipedUserId': lastSwipedUserId,
+      'isOnline': isOnline,
     };
   }
 
@@ -143,6 +147,7 @@ class UserModel {
     double? matchScore,
     String? distance,
     String? lastSwipedUserId,
+    bool? isOnline,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -164,6 +169,7 @@ class UserModel {
       matchScore: matchScore ?? this.matchScore,
       distance: distance ?? this.distance,
       lastSwipedUserId: lastSwipedUserId ?? this.lastSwipedUserId,
+      isOnline: isOnline ?? this.isOnline,
     );
   }
 }

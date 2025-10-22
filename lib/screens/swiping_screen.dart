@@ -1,6 +1,5 @@
 // /screens/swiping_screen.dart
 
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,8 +35,9 @@ class _SwipingScreenState extends State<SwipingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _confettiController =
-        ConfettiController(duration: const Duration(seconds: 2));
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
 
     // Profiles are now loaded automatically by the SwipeProvider
   }
@@ -212,8 +212,8 @@ class _SwipingScreenState extends State<SwipingScreen>
               duration: const Duration(seconds: 2),
               decoration: BoxDecoration(gradient: bgGradient),
               child: Stack(
-                  /* ... */
-                  ),
+                /* ... */
+              ),
             ),
 
             // Card Swiper
@@ -222,68 +222,106 @@ class _SwipingScreenState extends State<SwipingScreen>
                     child: CircularProgressIndicator(color: Colors.pinkAccent),
                   )
                 : swipeProvider.profiles.isEmpty
-                    ? _buildEmptyState(swipeProvider) // Pass provider
-                    : Padding(
-                        padding: const EdgeInsets.only(top: 80, bottom: 100),
-                        child: CardSwiper(
-                          controller: _swiperController,
-                          cardsCount: swipeProvider.profiles.length,
-                          numberOfCardsDisplayed:
-                              math.min(2, swipeProvider.profiles.length),
-                          backCardOffset: const Offset(0, 25),
-                          padding: const EdgeInsets.all(8),
-                          // --- MODIFY 'onSwipe' ---
-                          onSwipe: (previousIndex, currentIndex, direction) async {
-                            
-                            if (previousIndex < 0 ||
-                                previousIndex >= swipeProvider.profiles.length) {
-                              print(
-                                  "Swipe blocked: Invalid previousIndex $previousIndex");
-                              return false;
-                            }
-
-                            _currentCardIndex = currentIndex ?? 0;
-
-                            if (!swipeProvider.canSwipe) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Daily swipe limit reached! Go Premium for unlimited swipes.",
-                                  ),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                              print("Swipe blocked: Daily limit reached.");
-                              return false;
-                            }
-
-                            final swipedUser =
-                                swipeProvider.profiles[previousIndex];
-                            final bool liked =
-                                direction == CardSwiperDirection.right;
-
-                            // --- THIS IS THE FIX ---
-                            // DO NOT AWAIT. Call it and forget.
-                            swipeProvider.swipe(
-                              swipedUser, // Pass the full user object
-                              liked,
-                              false, // Not a super like
-                            );
-
-                            // Return true IMMEDIATELY to unblock the UI
-                            return true;
-                            // --- END FIX ---
-                          },
-                          cardBuilder: (context, index, percentX, percentY) {
-                            // Check index boundary
-                            if (index >= swipeProvider.profiles.length) {
-                              return Container(); // Return empty container if index is out of bounds
-                            }
-                            final profile = swipeProvider.profiles[index];
-                            return _profileCard(profile, percentX.toDouble());
-                          },
-                        ),
+                ? _buildEmptyState(swipeProvider) // Pass provider
+                : Padding(
+                    padding: const EdgeInsets.only(top: 80, bottom: 100),
+                    child: CardSwiper(
+                      key: ValueKey(swipeProvider.currentUser?.uid ?? 'logged_out'),
+                      controller: _swiperController,
+                      cardsCount: swipeProvider.profiles.length,
+                      numberOfCardsDisplayed: math.min(
+                        2,
+                        swipeProvider.profiles.length,
                       ),
+                      backCardOffset: const Offset(0, 25),
+                      padding: const EdgeInsets.all(8),
+                      // --- MODIFY 'onSwipe' ---
+                      onSwipe: (previousIndex, currentIndex, direction) async {
+                        if (previousIndex < 0 ||
+                            previousIndex >= swipeProvider.profiles.length) {
+                          print(
+                            "Swipe blocked: Invalid previousIndex $previousIndex",
+                          );
+                          return false;
+                        }
+
+                        _currentCardIndex = currentIndex ?? 0;
+
+                        if (!swipeProvider.canSwipe) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "🚀 You’re out of likes! Get Unlimited Swipes with Premium.",
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        print("Swipe blocked: Daily limit reached.");
+                        return false;
+                      }
+
+                        final swipedUser =
+                            swipeProvider.profiles[previousIndex];
+                        final bool liked =
+                            direction == CardSwiperDirection.right;
+
+                        // --- THIS IS THE FIX ---
+                        // DO NOT AWAIT. Call it and forget.
+                        swipeProvider.swipe(
+                          swipedUser, // Pass the full user object
+                          liked,
+                          false, // Not a super like
+                        );
+
+                        // Return true IMMEDIATELY to unblock the UI
+                        return true;
+                        // --- END FIX ---
+                      },
+                      // In swiping_screen.dart -> build method -> CardSwiper
+                      cardBuilder: (context, index, percentX, percentY) {
+                        final profiles =
+                            swipeProvider.profiles; // Get a local reference
+                        final profileCount = profiles.length;
+                        final currentUid =
+                            swipeProvider.currentUser?.uid ?? "UNKNOWN_UID";
+
+                        // Boundary check
+                        if (index < 0 || index >= profileCount) {
+                          print(
+                            "‼️ cardBuilder: Invalid index $index (Count: $profileCount). Current user: $currentUid",
+                          );
+                          return Container(
+                            color: Colors.red.withOpacity(0.5),
+                          ); // VISIBLE ERROR
+                        }
+
+                        final profile = profiles[index];
+                        print(
+                          "  cardBuilder: Index $index -> UID ${profile.uid} (Current: $currentUid)",
+                        ); // Log before check
+
+                        // Self-profile check
+                        if (profile.uid == currentUid) {
+                          print(
+                            "‼️ CRITICAL ERROR in cardBuilder: Trying to build self-profile (UID: ${profile.uid}) at index $index!",
+                          );
+                          return Container(
+                            // Return a distinct placeholder for self-profile
+                            color: Colors.orange.withOpacity(0.5),
+                            child: Center(
+                              child: Text(
+                                "ERROR\nSelf Profile\nUID: ${profile.uid}",
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        }
+
+                        // If checks pass, build the actual card
+                        return _profileCard(profile, percentX.toDouble());
+                      },
+                    ),
+                  ),
 
             // Swipe Buttons
             Padding(
@@ -297,15 +335,16 @@ class _SwipingScreenState extends State<SwipingScreen>
                     (swipeProvider.isSwiping || swipeProvider.profiles.isEmpty)
                         ? null
                         : () =>
-                            _swiperController.swipe(CardSwiperDirection.left),
+                              _swiperController.swipe(CardSwiperDirection.left),
                   ),
                   _glowButton(
                     Icons.favorite,
                     primaryColor,
                     (swipeProvider.isSwiping || swipeProvider.profiles.isEmpty)
                         ? null
-                        : () =>
-                            _swiperController.swipe(CardSwiperDirection.right),
+                        : () => _swiperController.swipe(
+                            CardSwiperDirection.right,
+                          ),
                   ),
 
                   // Third button: undo / super-like
@@ -313,8 +352,9 @@ class _SwipingScreenState extends State<SwipingScreen>
                     builder: (context) {
                       // We get user data from swipeProvider's currentUser
                       final currentUserData = swipeProvider.currentUser;
-                      if (currentUserData == null)
+                      if (currentUserData == null) {
                         return Container(); // User not loaded yet
+                      }
 
                       final isPremiumLocal = currentUserData.isPremium;
                       final superLikesUsed =
@@ -323,7 +363,8 @@ class _SwipingScreenState extends State<SwipingScreen>
                       // Use constants for clarity
                       final int maxPremiumSuperLikes = 10;
 
-                      final bool isSuperLikeMode = isPremiumLocal &&
+                      final bool isSuperLikeMode =
+                          isPremiumLocal &&
                           superLikesUsed < maxPremiumSuperLikes;
                       final bool isUndoAvailable =
                           swipeProvider.lastSwipedUserId != null;
@@ -333,7 +374,8 @@ class _SwipingScreenState extends State<SwipingScreen>
                           ? Colors.blueAccent
                           : (isUndoAvailable ? Colors.amber : Colors.grey);
 
-                      final onPressed = (swipeProvider.isSwiping ||
+                      final onPressed =
+                          (swipeProvider.isSwiping ||
                               swipeProvider.profiles.isEmpty)
                           ? null
                           : () async {
@@ -342,8 +384,9 @@ class _SwipingScreenState extends State<SwipingScreen>
                                 // Super like flow
                                 final index = _currentCardIndex;
                                 if (index < 0 ||
-                                    index >= swipeProvider.profiles.length)
+                                    index >= swipeProvider.profiles.length) {
                                   return;
+                                }
 
                                 final target = swipeProvider.profiles[index];
 
@@ -356,8 +399,9 @@ class _SwipingScreenState extends State<SwipingScreen>
                                 );
 
                                 // Just animate the card
-                                _swiperController
-                                    .swipe(CardSwiperDirection.right);
+                                _swiperController.swipe(
+                                  CardSwiperDirection.right,
+                                );
 
                                 // We NO LONGER check for match here.
                                 // The Consumer logic will handle it.
@@ -367,14 +411,16 @@ class _SwipingScreenState extends State<SwipingScreen>
                                 if (!isUndoAvailable) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                        content:
-                                            Text("No swipe recorded to undo.")),
+                                      content: Text(
+                                        "No swipe recorded to undo.",
+                                      ),
+                                    ),
                                   );
                                   return;
                                 }
 
-                                final res =
-                                    await swipeProvider.revertLastSwipe();
+                                final res = await swipeProvider
+                                    .revertLastSwipe();
 
                                 if (res['success'] == true) {
                                   _swiperController.undo();
@@ -382,8 +428,10 @@ class _SwipingScreenState extends State<SwipingScreen>
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                        content:
-                                            Text(res['message'] ?? "Undo failed.")),
+                                      content: Text(
+                                        res['message'] ?? "Undo failed.",
+                                      ),
+                                    ),
                                   );
                                 }
                               }
@@ -689,8 +737,9 @@ class _SwipingScreenState extends State<SwipingScreen>
         ),
         child: CircleAvatar(
           radius: 34,
-          backgroundColor:
-              isDisabled ? Colors.grey.shade200 : Colors.white.withOpacity(0.95),
+          backgroundColor: isDisabled
+              ? Colors.grey.shade200
+              : Colors.white.withOpacity(0.95),
           child: Icon(icon, size: 32, color: displayColor),
         ),
       ),
